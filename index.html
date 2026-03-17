@@ -22,6 +22,8 @@
   <meta name="twitter:title" content="WXNOW — Minute-by-minute weather">
   <meta name="twitter:description" content="Free hyperlocal weather. No ads. No account.">
   <meta name="twitter:image" content="https://wxnow.vercel.app/og-image.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script>
     try {
@@ -53,17 +55,12 @@
     </div>
   </div>
 
-  <div id="location-label">Locating…</div>
-
   <div id="location-bar">
     <div id="saved-locations"></div>
-    <div id="search-wrapper">
-      <input type="text" id="search-input" placeholder="Add city..." autocomplete="off"
-        autocorrect="off" spellcheck="false" />
-      <button id="btn-search-clear" class="hidden">✕</button>
-    </div>
     <div id="search-results"></div>
   </div>
+
+  <div id="location-label" class="font-label">Locating…</div>
 
   <div id="loading">Loading weather…</div>
   <div id="error" class="hidden"></div>
@@ -72,39 +69,34 @@
     <div id="current">
       <div id="hero-left">
         <div id="current-temp">--°</div>
-        <div id="current-condition">--</div>
-        <div id="weather-briefing" class="weather-briefing"></div>
+        <div id="current-condition" class="font-label">--</div>
+        <div id="weather-briefing" class="weather-briefing font-label"></div>
         <div id="current-feels">--</div>
         <span id="feels-trend"></span>
       </div>
       <div id="hero-sparkline"></div>
     </div>
 
-    <p id="rain-summary"></p>
+    <div id="stats-inline" class="stats-inline font-label"></div>
+
+    <div id="alert-banner-nws" class="alert-banner-compact hidden">
+      <span class="alert-banner-badge">⚠</span>
+      <span class="alert-banner-text font-label"></span>
+      <span class="alert-banner-arrow">›</span>
+    </div>
 
     <div id="install-nudge" class="hidden">
       <span>📲 Install WXNOW — add to your home screen for instant access</span>
       <button id="btn-install-dismiss">✕</button>
     </div>
 
-    <div id="alerts-container" class="hidden"></div>
-
-    <div id="stats-bar"></div>
-
-    <div id="now-always"></div>
-
-    <div id="briefing-card">
-      <div id="briefing-headline"></div>
-      <div id="briefing-lines"></div>
-    </div>
-
     <div id="tabs">
-      <button class="tab-btn active" data-tab="tab-15min">15 Min</button>
+      <button class="tab-btn active" data-tab="tab-now">Now</button>
       <button class="tab-btn" data-tab="tab-hourly">Hourly</button>
       <button class="tab-btn" data-tab="tab-7day">7 Day</button>
     </div>
 
-    <div id="tab-15min" class="tab-panel active"></div>
+    <div id="tab-now" class="tab-panel active"></div>
     <div id="tab-hourly" class="tab-panel"></div>
     <div id="tab-7day" class="tab-panel"></div>
   </div>
@@ -112,6 +104,13 @@
   <div id="footer">
     <div>Built with <span class="footer-heart">🤍</span> · No ads · No tracking · No account</div>
     <div class="footer-attr">Weather data via Open-Meteo + NOAA</div>
+  </div>
+
+  <div id="alert-sheet-overlay" class="sheet-overlay hidden">
+    <div id="alert-sheet" class="sheet">
+      <div class="sheet-handle"></div>
+      <div id="alert-sheet-content"></div>
+    </div>
   </div>
 
   <script>

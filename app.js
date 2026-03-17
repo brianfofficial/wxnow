@@ -46,27 +46,24 @@
     currentCondition: $('current-condition'),
     currentFeels: $('current-feels'),
     heroSparkline: $('hero-sparkline'),
-    rainSummary: $('rain-summary'),
-    statsBar: $('stats-bar'),
-    nowAlways: $('now-always'),
+    statsInline: $('stats-inline'),
+    tabNow: $('tab-now'),
     precipIndicator: $('precip-indicator'),
-    tab15: $('tab-15min'),
+    alertBanner: $('alert-banner-nws'),
     tabHourly: $('tab-hourly'),
     tab7day: $('tab-7day'),
     btnRefresh: $('btn-refresh'),
     header: $('header'),
-    alertsContainer: $('alerts-container'),
+    alertSheetOverlay: $('alert-sheet-overlay'),
+    alertSheetContent: $('alert-sheet-content'),
     installNudge: $('install-nudge'),
     btnInstallDismiss: $('btn-install-dismiss'),
     btnRadar: $('btn-radar'),
     btnUnit: $('btn-unit'),
-    briefingHeadline: $('briefing-headline'),
-    briefingLines: $('briefing-lines'),
     feelsTrend: $('feels-trend'),
     btnShare: $('btn-share'),
     searchInput: $('search-input'),
     searchResults: $('search-results'),
-    btnSearchClear: $('btn-search-clear'),
     bgGlow: $('bg-glow'),
   };
 
@@ -177,8 +174,7 @@
     if (chip.classList.contains('confirm-remove')) return;
     if (chip.classList.contains('loc-chip-gps')) {
       currentSavedLocation = null;
-      el.searchInput.value = '';
-      el.btnSearchClear.classList.add('hidden');
+      if (el.searchInput) el.searchInput.value = '';
       isFirstRender = true;
       getPosition().then(pos => {
         savedLat = pos.coords.latitude;
@@ -199,8 +195,7 @@
     savedLat = lat;
     savedLon = lon;
     lastLocation = name;
-    el.searchInput.value = name;
-    el.btnSearchClear.classList.remove('hidden');
+    if (el.searchInput) el.searchInput.value = '';
     isFirstRender = true;
     debouncedFetch(lat, lon, name);
     renderLocationChips();
@@ -261,6 +256,23 @@
 
       container.appendChild(chip);
     });
+
+    // Chip-shaped search input at end
+    const searchChip = document.createElement('div');
+    searchChip.className = 'loc-chip loc-chip-search';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.id = 'search-input';
+    searchInput.placeholder = '+ Add';
+    searchInput.autocomplete = 'off';
+    searchInput.autocorrect = 'off';
+    searchInput.spellcheck = false;
+    searchChip.appendChild(searchInput);
+    container.appendChild(searchChip);
+
+    // Re-bind search input ref
+    el.searchInput = searchInput;
+    bindSearchInput();
   }
 
   async function updateChipTemps() {
@@ -405,32 +417,15 @@
     el.currentFeels.textContent = `Feels like ${displayTemp(current.apparent_temperature)}`;
   }
 
-  function renderStatsBar(current) {
-    clearEl(el.statsBar);
-    const items = [
-      { label: 'Humidity', value: `${current.relative_humidity_2m}%` },
-      { label: 'Wind', value: `${displayWind(current.wind_speed_10m)} ${degToCompass(current.wind_direction_10m)}` },
-      { label: 'Dew', value: displayTemp(current.dew_point_2m) },
-      { label: 'Precip', value: current.precipitation === 0 ? '—' : `${current.precipitation}"` },
+  function renderStatsInline(current) {
+    if (!el.statsInline) return;
+    const parts = [
+      `<span class="font-data">${Math.round(current.relative_humidity_2m)}%</span> humidity`,
+      `<span class="font-data">${displayWind(current.wind_speed_10m)}</span> ${degToCompass(current.wind_direction_10m)}`,
+      `<span class="font-data">${displayTemp(current.dew_point_2m)}</span> dew`,
+      `<span class="font-data">${current.precipitation > 0 ? current.precipitation.toFixed(2) + '"' : '—'}</span> precip`
     ];
-    items.forEach((item, idx) => {
-      if (idx > 0) {
-        const divider = document.createElement('span');
-        divider.className = 'stats-divider';
-        el.statsBar.appendChild(divider);
-      }
-      const pill = document.createElement('span');
-      pill.className = 'stats-pill';
-      const label = document.createElement('span');
-      label.className = 'stats-label';
-      label.textContent = item.label;
-      const value = document.createElement('span');
-      value.className = 'stats-value';
-      value.textContent = item.value;
-      pill.appendChild(label);
-      pill.appendChild(value);
-      el.statsBar.appendChild(pill);
-    });
+    el.statsInline.innerHTML = parts.join(' <span class="stats-dot">·</span> ');
   }
 
   function renderSparkline(hourlySlots) {
@@ -487,16 +482,7 @@
     return { text: `Brief chance of rain after ${slotTime}.`, active: false };
   }
 
-  function renderRainSummary(minutelySlots) {
-    const summary = rainSummary(minutelySlots);
-    el.rainSummary.textContent = summary.text;
-    el.rainSummary.classList.remove('rain-active', 'rain-expected');
-    if (summary.active) {
-      el.rainSummary.classList.add('rain-active');
-    } else if (minutelySlots && minutelySlots.some((s) => s.precip > 0)) {
-      el.rainSummary.classList.add('rain-expected');
-    }
-  }
+  // renderRainSummary now creates an element inside the Now tab (called from renderNowTab)
 
   function renderPrecipIndicator(minutelySlots) {
     if (minutelySlots && minutelySlots.some((s) => s.precip > 0)) {
@@ -506,102 +492,93 @@
     }
   }
 
-  function renderNowTab(minutelySlots) {
-    clearEl(el.nowAlways);
+  function renderNowTab(minutelySlots, dailySlots, hourlySlots, alerts) {
+    clearEl(el.tabNow);
+
+    // Rain summary at top
+    const summary = rainSummary(minutelySlots);
+    const summaryEl = document.createElement('p');
+    summaryEl.id = 'rain-summary';
+    summaryEl.className = 'font-label';
+    summaryEl.textContent = summary.text;
+    if (summary.active) summaryEl.classList.add('rain-active');
+    else if (minutelySlots && minutelySlots.some(s => s.precip > 0)) summaryEl.classList.add('rain-expected');
+    el.tabNow.appendChild(summaryEl);
+
+    // Section label
     const label = document.createElement('div');
-    label.className = 'section-label';
+    label.className = 'section-label font-label';
     label.textContent = 'Next 2 Hours';
-    el.nowAlways.appendChild(label);
+    el.tabNow.appendChild(label);
 
     if (!minutelySlots || minutelySlots.length === 0) {
       const msg = document.createElement('div');
-      msg.className = 'tab-unavailable';
+      msg.className = 'tab-unavailable font-label';
       msg.textContent = '15-min data unavailable for this location';
-      el.nowAlways.appendChild(msg);
-      return;
-    }
-    const allClear = minutelySlots.every(s => s.precip === 0);
-    if (allClear) {
-      const empty = document.createElement('div');
-      empty.className = 'now-empty';
-      empty.innerHTML = '<div class="now-empty-icon">👍</div>All clear for the next 2 hours.';
-      el.nowAlways.appendChild(empty);
-      return;
-    }
-    const capped = minutelySlots.slice(0, 8);
-    const maxPrecip = Math.max(...capped.map((s) => s.precip), 0.01);
-    capped.forEach((slot, idx) => {
-      const row = document.createElement('div');
-      row.className = 'now-row';
-
-      const time = document.createElement('span');
-      time.className = 'now-time';
-      time.textContent = idx === 0 ? 'NOW' : formatTime(slot.time);
-
-      const barWrap = document.createElement('div');
-      barWrap.className = 'now-bar-wrap';
-      const bar = document.createElement('div');
-      bar.className = 'now-bar';
-      const finalWidth = `${Math.max((slot.precip / maxPrecip) * 100, 0)}%`;
-      if (isFirstRender) {
-        bar.style.width = '0%';
-        bar.style.transitionDelay = `${idx * 60}ms`;
-        requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = finalWidth; }));
+      el.tabNow.appendChild(msg);
+    } else {
+      const allClear = minutelySlots.every(s => s.precip === 0);
+      if (allClear) {
+        const empty = document.createElement('div');
+        empty.className = 'now-empty font-label';
+        empty.innerHTML = '<div class="now-empty-icon">👍</div>All clear for the next 2 hours.';
+        el.tabNow.appendChild(empty);
       } else {
-        bar.style.width = finalWidth;
+        const capped = minutelySlots.slice(0, 8);
+        const maxPrecip = Math.max(...capped.map(s => s.precip), 0.01);
+        capped.forEach((slot, idx) => {
+          const row = document.createElement('div');
+          row.className = 'now-row';
+          const time = document.createElement('span');
+          time.className = 'now-time font-label';
+          time.textContent = idx === 0 ? 'NOW' : formatTime(slot.time);
+          const barWrap = document.createElement('div');
+          barWrap.className = 'now-bar-wrap';
+          const bar = document.createElement('div');
+          bar.className = 'now-bar';
+          const finalWidth = `${Math.max((slot.precip / maxPrecip) * 100, 0)}%`;
+          if (isFirstRender) {
+            bar.style.width = '0%';
+            bar.style.transitionDelay = `${idx * 60}ms`;
+            requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = finalWidth; }));
+          } else {
+            bar.style.width = finalWidth;
+          }
+          barWrap.appendChild(bar);
+          const temp = document.createElement('span');
+          temp.className = 'now-temp font-data';
+          temp.textContent = displayTemp(slot.temp);
+          const precip = document.createElement('span');
+          precip.className = 'now-precip font-data';
+          precip.textContent = slot.precip === 0 ? '—' : `${slot.precip}"`;
+          row.appendChild(time);
+          row.appendChild(barWrap);
+          row.appendChild(temp);
+          row.appendChild(precip);
+          el.tabNow.appendChild(row);
+        });
       }
-      barWrap.appendChild(bar);
-
-      const temp = document.createElement('span');
-      temp.className = 'now-temp';
-      temp.textContent = displayTemp(slot.temp);
-
-      const precip = document.createElement('span');
-      precip.className = 'now-precip';
-      precip.textContent = slot.precip === 0 ? '—' : `${slot.precip}"`;
-
-      row.appendChild(time);
-      row.appendChild(barWrap);
-      row.appendChild(temp);
-      row.appendChild(precip);
-      el.nowAlways.appendChild(row);
-    });
-  }
-
-  function render15MinTab(minutelySlots) {
-    clearEl(el.tab15);
-    if (!minutelySlots || minutelySlots.length === 0) {
-      const msg = document.createElement('div');
-      msg.className = 'tab-unavailable';
-      msg.textContent = '15-min data unavailable for this location';
-      el.tab15.appendChild(msg);
-      return;
     }
-    const hasRain = minutelySlots.some((s) => s.precip > 0);
-    if (!hasRain) {
-      const msg = document.createElement('div');
-      msg.className = 'precip-no-rain';
-      msg.textContent = 'No precipitation expected';
-      el.tab15.appendChild(msg);
-      return;
-    }
-    const maxPrecip = Math.max(...minutelySlots.map((s) => s.precip), 0.01);
-    const chart = document.createElement('div');
-    chart.className = 'precip-chart';
-    minutelySlots.forEach((slot, idx) => {
-      const col = document.createElement('div');
-      col.className = 'precip-col';
-      const bar = document.createElement('div');
-      bar.className = 'precip-bar';
-      bar.style.height = `${Math.max((slot.precip / maxPrecip) * 100, 2)}%`;
-      const label = document.createElement('span');
-      label.className = 'precip-bar-label';
-      label.textContent = idx === 0 ? 'NOW' : formatTime(slot.time);
-      col.appendChild(bar);
-      col.appendChild(label);
-      chart.appendChild(col);
+
+    // Briefing card at bottom of Now tab
+    const briefing = generateBriefing(dailySlots, hourlySlots, alerts, minutelySlots);
+    const card = document.createElement('div');
+    card.id = 'briefing-card';
+    const headline = document.createElement('div');
+    headline.id = 'briefing-headline';
+    headline.className = 'font-label';
+    headline.textContent = briefing.headline;
+    const lines = document.createElement('div');
+    lines.id = 'briefing-lines';
+    lines.className = 'font-label';
+    briefing.lines.forEach(line => {
+      const div = document.createElement('div');
+      div.textContent = line;
+      lines.appendChild(div);
     });
-    el.tab15.appendChild(chart);
+    card.appendChild(headline);
+    card.appendChild(lines);
+    el.tabNow.appendChild(card);
   }
 
   function probClass(prob) {
@@ -908,16 +885,6 @@
     return result;
   }
 
-  function renderBriefing(daily, hourly, alerts, minutelySlots) {
-    const briefing = generateBriefing(daily, hourly, alerts, minutelySlots);
-    el.briefingHeadline.textContent = briefing.headline;
-    clearEl(el.briefingLines);
-    briefing.lines.forEach(line => {
-      const div = document.createElement('div');
-      div.textContent = line;
-      el.briefingLines.appendChild(div);
-    });
-  }
 
   function bestWindow(hourlySlots) {
     if (!hourlySlots || hourlySlots.length < 2) return null;
@@ -1070,62 +1037,24 @@
     el.loading.classList.add('hidden');
     el.weatherContent.classList.remove('hidden');
     const hero = el.weatherContent.querySelector('#current');
-    const statsBar = el.statsBar;
     const tabs = el.weatherContent.querySelector('#tabs');
-    const nowAlways = el.nowAlways;
 
-    // Hero skeleton
     if (hero) {
       const heroLeft = hero.querySelector('#hero-left');
       if (heroLeft) {
         heroLeft.innerHTML = '<div class="skeleton-hero">'
-          + '<div class="skeleton-rect" style="width:60%;height:48px"></div>'
+          + '<div class="skeleton-rect" style="width:60%;height:44px"></div>'
           + '<div class="skeleton-rect" style="width:40%;height:14px"></div>'
-          + '<div class="skeleton-rect" style="width:30%;height:12px"></div>'
+          + '<div class="skeleton-rect" style="width:80%;height:12px"></div>'
           + '</div>';
       }
     }
 
-    // Stats skeleton
-    if (statsBar) {
-      clearEl(statsBar);
-      const wrap = document.createElement('div');
-      wrap.className = 'skeleton-stats';
-      for (let i = 0; i < 4; i++) {
-        const r = document.createElement('div');
-        r.className = 'skeleton-rect';
-        r.style.cssText = 'width:24%;height:56px;flex-shrink:0';
-        wrap.appendChild(r);
-      }
-      statsBar.appendChild(wrap);
+    if (el.statsInline) {
+      el.statsInline.innerHTML = '<div class="skeleton-rect" style="width:90%;height:14px;display:inline-block"></div>';
     }
 
-    // Tabs skeleton (just show 3 rects)
-    if (tabs) {
-      const tabWrap = document.createElement('div');
-      tabWrap.className = 'skeleton-tabs';
-      for (let i = 0; i < 3; i++) {
-        const r = document.createElement('div');
-        r.className = 'skeleton-rect';
-        r.style.cssText = 'width:33%;height:32px';
-        tabWrap.appendChild(r);
-      }
-      tabs.style.visibility = 'hidden';
-    }
-
-    // Now-always section: 6 row placeholders
-    if (nowAlways) {
-      clearEl(nowAlways);
-      const rows = document.createElement('div');
-      rows.className = 'skeleton-rows';
-      for (let i = 0; i < 6; i++) {
-        const r = document.createElement('div');
-        r.className = 'skeleton-rect';
-        r.style.cssText = 'width:100%;height:40px';
-        rows.appendChild(r);
-      }
-      nowAlways.appendChild(rows);
-    }
+    if (tabs) tabs.style.visibility = 'hidden';
   }
 
   // --- Offline Cache ---
@@ -1241,13 +1170,10 @@
 
     const targets = [
       { sel: '#current', delay: 0 },
-      { sel: '#rain-summary', delay: 60 },
-      { sel: '#alerts-container', delay: 120 },
-      { sel: '#stats-bar', delay: 180 },
-      { sel: '#now-always .section-label', delay: 240 },
-      { sel: '.now-row', delay: 280, stagger: 40 },
-      { sel: '#briefing-card', delay: 640 },
-      { sel: '#tabs', delay: 700 },
+      { sel: '#stats-inline', delay: 60 },
+      { sel: '#alert-banner-nws', delay: 120 },
+      { sel: '#tabs', delay: 180 },
+      { sel: '.tab-panel.active', delay: 220 },
     ];
 
     targets.forEach(({ sel, delay, stagger }) => {
@@ -1324,15 +1250,12 @@
     if (briefingEl) briefingEl.textContent = getWeatherBriefing(weather, dailySlots, hourlySlots);
     renderFeelsTrend(current, hourlySlots);
     renderSparkline(hourlySlots);
-    renderRainSummary(minutelySlots);
-    renderStatsBar(current);
+    renderStatsInline(current);
+    renderAlertBanner(activeAlerts);
     renderPrecipIndicator(minutelySlots);
-    renderNowTab(minutelySlots);
-    renderBriefing(dailySlots, hourlySlots, activeAlerts, minutelySlots);
-    render15MinTab(minutelySlots);
+    renderNowTab(minutelySlots, dailySlots, hourlySlots, activeAlerts);
     renderHourlyTab(hourlySlots);
     renderDaily(dailySlots, hourlySlots);
-    renderAlerts(activeAlerts);
     applyWeatherBackground(current.weather_code, dailySlots);
 
     el.loading.classList.add('hidden');
@@ -1409,79 +1332,80 @@
       .sort((a, b) => (sevOrder[a.severity] ?? 4) - (sevOrder[b.severity] ?? 4));
   }
 
-  function renderAlerts(alerts) {
-    clearEl(el.alertsContainer);
+  function renderAlertBanner(alerts) {
     if (!alerts || alerts.length === 0) {
-      el.alertsContainer.classList.add('hidden');
+      el.alertBanner.classList.add('hidden');
       document.title = 'WXNOW';
       return;
     }
-    el.alertsContainer.classList.remove('hidden');
-
-    const sevStyles = {
-      Extreme: { bg: '#7f1d1d', text: '#fca5a5', border: '#ef4444' },
-      Severe:  { bg: '#7c2d12', text: '#fdba74', border: '#f97316' },
-      Moderate:{ bg: '#713f12', text: '#fde68a', border: '#eab308' },
-    };
-    const defaultStyle = { bg: '#1e293b', text: '#94a3b8', border: '#475569' };
-
-    alerts.forEach((a) => {
-      const s = sevStyles[a.severity] || defaultStyle;
-      const card = document.createElement('div');
-      card.className = 'alert-card';
-      card.style.borderLeftColor = s.border;
-
-      const badge = document.createElement('span');
-      badge.className = 'alert-badge';
-      badge.textContent = a.severity;
-      badge.style.background = s.bg;
-      badge.style.color = s.text;
-
-      const event = document.createElement('div');
-      event.className = 'alert-event';
-      event.textContent = a.event;
-
-      const headline = document.createElement('div');
-      headline.className = 'alert-headline';
-      headline.textContent = a.headline || '';
-
-      const expires = document.createElement('div');
-      expires.className = 'alert-expires';
-      expires.textContent = `Expires ${formatTime(a.expires)}`;
-
-      card.appendChild(badge);
-      card.appendChild(event);
-      card.appendChild(headline);
-      card.appendChild(expires);
-
-      if (a.instruction) {
-        const toggle = document.createElement('button');
-        toggle.className = 'alert-toggle';
-        toggle.textContent = '▸ Details';
-        toggle.dataset.action = 'toggle-alert';
-
-        const instruction = document.createElement('div');
-        instruction.className = 'alert-instruction';
-        instruction.textContent = a.instruction;
-
-        card.appendChild(toggle);
-        card.appendChild(instruction);
-      }
-
-      el.alertsContainer.appendChild(card);
-    });
+    const most = alerts[0]; // already sorted by severity
+    const borderColors = { Extreme: '#ef4444', Severe: '#f97316', Moderate: '#f59e0b' };
+    const bgColors = { Extreme: 'rgba(239,68,68,0.06)', Severe: 'rgba(249,115,22,0.06)', Moderate: 'rgba(245,158,11,0.06)' };
+    el.alertBanner.style.borderLeftColor = borderColors[most.severity] || 'var(--border)';
+    el.alertBanner.style.background = bgColors[most.severity] || 'rgba(245,158,11,0.06)';
+    el.alertBanner.querySelector('.alert-banner-text').textContent = `${most.event} · Expires ${formatTime(most.expires)}`;
+    el.alertBanner.classList.remove('hidden');
 
     const severe = alerts.find(a => a.severity === 'Extreme' || a.severity === 'Severe');
     document.title = severe ? `⚠ WXNOW — ${severe.event}` : 'WXNOW';
   }
 
-  el.alertsContainer.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="toggle-alert"]');
-    if (!btn) return;
-    const card = btn.closest('.alert-card');
-    card.classList.toggle('expanded');
-    btn.textContent = card.classList.contains('expanded') ? '▾ Details' : '▸ Details';
+  function openAlertSheet(alerts) {
+    clearEl(el.alertSheetContent);
+    const sevStyles = {
+      Extreme: { bg: '#7f1d1d', text: '#fca5a5' },
+      Severe:  { bg: '#7c2d12', text: '#fdba74' },
+      Moderate:{ bg: '#713f12', text: '#fde68a' },
+    };
+    const defaultStyle = { bg: '#1e293b', text: '#94a3b8' };
+    alerts.forEach(a => {
+      const s = sevStyles[a.severity] || defaultStyle;
+      const wrap = document.createElement('div');
+      wrap.style.marginBottom = '20px';
+      const badge = document.createElement('span');
+      badge.className = 'sheet-alert-badge';
+      badge.textContent = a.severity;
+      badge.style.background = s.bg;
+      badge.style.color = s.text;
+      const event = document.createElement('div');
+      event.className = 'sheet-alert-event';
+      event.textContent = a.event;
+      const headline = document.createElement('div');
+      headline.className = 'sheet-alert-headline';
+      headline.textContent = a.headline || '';
+      const expires = document.createElement('div');
+      expires.className = 'sheet-alert-expires';
+      expires.textContent = `Expires ${formatTime(a.expires)}`;
+      wrap.appendChild(badge);
+      wrap.appendChild(event);
+      wrap.appendChild(headline);
+      wrap.appendChild(expires);
+      if (a.instruction) {
+        const inst = document.createElement('div');
+        inst.className = 'sheet-alert-instruction';
+        inst.textContent = a.instruction;
+        wrap.appendChild(inst);
+      }
+      el.alertSheetContent.appendChild(wrap);
+    });
+    el.alertSheetOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => el.alertSheetOverlay.classList.add('visible'));
+  }
+
+  function closeAlertSheet() {
+    el.alertSheetOverlay.classList.remove('visible');
+    setTimeout(() => el.alertSheetOverlay.classList.add('hidden'), 300);
+  }
+
+  // Alert banner click → open sheet
+  el.alertBanner.addEventListener('click', () => {
+    if (activeAlerts && activeAlerts.length > 0) openAlertSheet(activeAlerts);
   });
+  // Close sheet on overlay click
+  el.alertSheetOverlay.addEventListener('click', (e) => {
+    if (e.target === el.alertSheetOverlay) closeAlertSheet();
+  });
+
 
   // --- Load ---
 
@@ -2362,8 +2286,7 @@
   }
 
   function restoreGps() {
-    el.searchInput.value = '';
-    el.btnSearchClear.classList.add('hidden');
+    if (el.searchInput) el.searchInput.value = '';
     hideSearchResults();
     currentSavedLocation = null;
     isFirstRender = true;
@@ -2382,61 +2305,62 @@
     renderLocationChips();
   }
 
-  el.searchInput.addEventListener('keyup', (e) => {
-    if (e.key === 'Escape') {
-      hideSearchResults();
-      return;
-    }
-    clearTimeout(searchTimer);
-    const query = el.searchInput.value.trim();
-    if (query.length < 2) {
-      hideSearchResults();
-      return;
-    }
-    searchTimer = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`
-        );
-        const data = await res.json();
-        clearEl(el.searchResults);
-
-        // GPS restore option
-        showSearchItem('📍 Use my location', true, restoreGps);
-
-        const results = data.results || [];
-        if (results.length === 0) {
-          showSearchItem('No results found', false);
-        } else {
-          results.forEach(r => {
-            const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
-            showSearchItem(label, true, () => {
-              savedLat = r.latitude;
-              savedLon = r.longitude;
-              const locName = [r.name, r.admin1].filter(Boolean).join(', ');
-              lastLocation = locName;
-              el.searchInput.value = locName;
-              el.btnSearchClear.classList.remove('hidden');
-              hideSearchResults();
-              isFirstRender = true;
-              debouncedFetch(savedLat, savedLon, locName);
-              // Save location and update chips
-              addSavedLocation(locName, r.latitude, r.longitude);
-              currentSavedLocation = { name: locName, lat: r.latitude, lon: r.longitude };
-              renderLocationChips();
-            });
-          });
-        }
-        el.searchResults.classList.add('visible');
-      } catch {
-        clearEl(el.searchResults);
-        showSearchItem('Search unavailable', false);
-        el.searchResults.classList.add('visible');
+  function bindSearchInput() {
+    if (!el.searchInput) return;
+    el.searchInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Escape') {
+        hideSearchResults();
+        el.searchInput.blur();
+        return;
       }
-    }, 300);
-  });
+      clearTimeout(searchTimer);
+      const query = el.searchInput.value.trim();
+      if (query.length < 2) {
+        hideSearchResults();
+        return;
+      }
+      searchTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`
+          );
+          const data = await res.json();
+          clearEl(el.searchResults);
+          showSearchItem('📍 Use my location', true, restoreGps);
+          const results = data.results || [];
+          if (results.length === 0) {
+            showSearchItem('No results found', false);
+          } else {
+            results.forEach(r => {
+              const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+              showSearchItem(label, true, () => {
+                savedLat = r.latitude;
+                savedLon = r.longitude;
+                const locName = [r.name, r.admin1].filter(Boolean).join(', ');
+                lastLocation = locName;
+                el.searchInput.value = '';
+                el.searchInput.blur();
+                hideSearchResults();
+                isFirstRender = true;
+                debouncedFetch(savedLat, savedLon, locName);
+                addSavedLocation(locName, r.latitude, r.longitude);
+                currentSavedLocation = { name: locName, lat: r.latitude, lon: r.longitude };
+                renderLocationChips();
+              });
+            });
+          }
+          el.searchResults.classList.add('visible');
+        } catch {
+          clearEl(el.searchResults);
+          showSearchItem('Search unavailable', false);
+          el.searchResults.classList.add('visible');
+        }
+      }, 300);
+    });
+  }
 
-  el.btnSearchClear.addEventListener('click', restoreGps);
+  // Initial bind (will be re-bound on each renderLocationChips)
+  bindSearchInput();
 
   // Close search results on outside click
   document.addEventListener('click', (e) => {
