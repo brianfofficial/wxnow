@@ -76,13 +76,20 @@ body {
 
 /* Content surface */
 #content-surface {
-  background: var(--surface);
-  border-radius: 20px 20px 0 0;
-  margin-top: -4px;
-  padding: 12px 16px 0;
+  background: var(--bg);
+  border-radius: 24px 24px 0 0;
+  padding: 14px 16px 0;
   position: relative;
   z-index: 1;
-  min-height: calc(100vh - 320px);
+  min-height: 50vh;
+}
+#content-surface::before {
+  content: '';
+  position: absolute;
+  top: -16px; left: 0; right: 0; height: 16px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  border-radius: 24px 24px 0 0;
+  pointer-events: none;
 }
 
 /* Precip indicator */
@@ -1131,14 +1138,16 @@ html.theme-transitioning *::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  font-family: 'DM Mono', monospace;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 12px;
-  color: var(--muted);
+  color: rgba(255,255,255,0.6);
   transition: height 0.2s ease;
   z-index: 50;
 }
-#pull-indicator.active { color: var(--accent); }
+#pull-indicator.active { color: rgba(255,255,255,0.95); }
 #pull-indicator.refreshing #pull-text {
   display: inline-block;
   animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;

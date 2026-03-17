@@ -961,55 +961,59 @@
     }
 
     const light = isLightTheme();
-    let top, bottom;
     const code = weatherCode;
-    const apparentTemp = lastWeather ? lastWeather.current.apparent_temperature : 70;
+    const apparentTemp = lastWeather ? lastWeather.current.apparent_temperature : null;
+    let c1, c2, c3, c4;
 
-    // Check hot gradient first
-    if (isDaytime && apparentTemp > 90 && light) {
-      top = '#f3904f'; bottom = '#fa709a';
+    // Night palettes — always dark regardless of theme
+    const NIGHT_CLEAR = ['#070b1e','#0f1640','#1a2060','#252d75'];
+    const NIGHT_CLOUDY = ['#0a1025','#141d3a','#1e2a4e','#2a3660'];
+
+    if (!isDaytime) {
+      if (code >= 95 && code <= 99) { [c1,c2,c3,c4] = ['#08060e','#100c20','#1a1230','#221840']; }
+      else if ((code >= 51 && code <= 82)) { [c1,c2,c3,c4] = ['#080e1a','#0e1a2c','#14263c','#1c324c']; }
+      else if (code === 2) { [c1,c2,c3,c4] = NIGHT_CLOUDY; }
+      else if (code === 3) { [c1,c2,c3,c4] = ['#0c1018','#141a24','#1e242e','#282f38']; }
+      else if (code === 45 || code === 48) { [c1,c2,c3,c4] = ['#0a0f16','#121820','#1a222c','#242c36']; }
+      else if (code >= 71 && code <= 77) { [c1,c2,c3,c4] = ['#0c1420','#14202e','#1e2c3c','#28364a']; }
+      else { [c1,c2,c3,c4] = NIGHT_CLEAR; }
+    } else if (isDaytime && apparentTemp != null && apparentTemp > 90) {
+      if (light) { [c1,c2,c3,c4] = ['#d4520a','#e87a2e','#f0a050','#f5cc8a']; }
+      else { [c1,c2,c3,c4] = ['#180800','#2a1206','#3c1c0c','#4e2812']; }
     } else if (code === 0 || code === 1) {
-      if (isDaytime) {
-        if (light) { top = '#4facfe'; bottom = '#00f2fe'; }
-        else { top = '#0a1e3d'; bottom = '#0d2847'; }
-      } else {
-        top = '#0c1445'; bottom = '#1a237e';
-      }
+      if (light) { [c1,c2,c3,c4] = ['#1a8cff','#4da6ff','#87c4f5','#bfdcf5']; }
+      else { [c1,c2,c3,c4] = ['#06101f','#0c1e38','#122c4e','#183a5c']; }
     } else if (code === 2) {
-      if (light) { top = '#89b4fa'; bottom = '#a5c8ff'; }
-      else { top = '#0d1f35'; bottom = '#111827'; }
+      if (light) { [c1,c2,c3,c4] = ['#5494cc','#7aadda','#a3c5e5','#ccdceb']; }
+      else { [c1,c2,c3,c4] = ['#0a1420','#0f1e30','#162940','#1e344e']; }
     } else if (code === 3) {
-      if (light) { top = '#8e9eab'; bottom = '#eef2f3'; }
-      else { top = '#111827'; bottom = '#0f172a'; }
+      if (light) { [c1,c2,c3,c4] = ['#6a7a8a','#8494a2','#a0adb8','#bcc5cc']; }
+      else { [c1,c2,c3,c4] = ['#0c1018','#141a24','#1e242e','#282f38']; }
     } else if (code === 45 || code === 48) {
-      if (light) { top = '#b5bdc8'; bottom = '#dfe4ea'; }
-      else { top = '#111820'; bottom = '#0d1520'; }
+      if (light) { [c1,c2,c3,c4] = ['#8a95a0','#a0a9b2','#b8bfc6','#d0d5da']; }
+      else { [c1,c2,c3,c4] = ['#0a0f16','#121820','#1a222c','#242c36']; }
     } else if (code >= 71 && code <= 77) {
-      if (light) { top = '#c9d6e3'; bottom = '#f5f7fa'; }
-      else { top = '#101828'; bottom = '#1a2436'; }
+      if (light) { [c1,c2,c3,c4] = ['#a8b8c6','#bcc9d4','#d2dbe3','#e8ecf0']; }
+      else { [c1,c2,c3,c4] = ['#0c1420','#14202e','#1e2c3c','#28364a']; }
     } else if (code >= 95 && code <= 99) {
-      if (light) { top = '#373b44'; bottom = '#4f5b62'; }
-      else { top = '#120a24'; bottom = '#1a0830'; }
+      if (light) { [c1,c2,c3,c4] = ['#1e2430','#2a3242','#3a4454','#4e5868']; }
+      else { [c1,c2,c3,c4] = ['#08060e','#100c20','#1a1230','#221840']; }
     } else if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
-      const heavy = code >= 63 || code >= 81;
-      if (light) {
-        top = heavy ? '#3d4f5f' : '#616d86';
-        bottom = heavy ? '#636b74' : '#96a2b8';
-      } else {
-        top = '#0d1a2d'; bottom = '#0a1525';
-      }
+      if (light) { [c1,c2,c3,c4] = ['#2e3e4e','#40525f','#586a76','#728490']; }
+      else { [c1,c2,c3,c4] = ['#080e1a','#0e1a2c','#14263c','#1c324c']; }
     } else if (code >= 51 && code <= 57) {
-      if (light) { top = '#616d86'; bottom = '#96a2b8'; }
-      else { top = '#0a1525'; bottom = '#060f1a'; }
+      if (light) { [c1,c2,c3,c4] = ['#4a5c6e','#627586','#7e909e','#9caab5']; }
+      else { [c1,c2,c3,c4] = ['#080e1a','#0e1a2c','#14263c','#1c324c']; }
     } else {
-      if (light) { top = '#616d86'; bottom = '#96a2b8'; }
-      else { top = '#0a1525'; bottom = '#060f1a'; }
+      if (light) { [c1,c2,c3,c4] = ['#4a5c6e','#627586','#7e909e','#9caab5']; }
+      else { [c1,c2,c3,c4] = ['#080e1a','#0e1a2c','#14263c','#1c324c']; }
     }
 
-    // Crossfade gradient transition
-    const newGrad = `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
-    if (bgTransitionTimer) clearTimeout(bgTransitionTimer);
+    const newGrad = `linear-gradient(180deg, ${c1} 0%, ${c2} 35%, ${c3} 70%, ${c4} 100%)`;
+    document.documentElement.style.setProperty('--weather-top', c1);
+    document.documentElement.style.setProperty('--weather-bottom', c4);
 
+    if (bgTransitionTimer) clearTimeout(bgTransitionTimer);
     el.weatherBgNext.style.background = newGrad;
     el.weatherBgNext.style.opacity = '1';
 
@@ -1025,16 +1029,16 @@
   function renderSkeleton() {
     el.loading.classList.add('hidden');
     el.weatherContent.classList.remove('hidden');
-    const hero = el.weatherContent.querySelector('#current');
+    const heroCard = $('hero-card');
     const tabs = el.weatherContent.querySelector('#tabs');
 
-    if (hero) {
-      const heroLeft = hero.querySelector('#hero-left');
-      if (heroLeft) {
-        heroLeft.innerHTML = '<div class="skeleton-hero">'
-          + '<div class="skeleton-rect" style="width:60%;height:44px"></div>'
-          + '<div class="skeleton-rect" style="width:40%;height:14px"></div>'
-          + '<div class="skeleton-rect" style="width:80%;height:12px"></div>'
+    if (heroCard) {
+      const current = heroCard.querySelector('#current');
+      if (current) {
+        current.innerHTML = '<div class="skeleton-hero">'
+          + '<div class="skeleton-rect" style="width:40%;height:60px;margin:0 auto"></div>'
+          + '<div class="skeleton-rect" style="width:50%;height:14px;margin:4px auto 0"></div>'
+          + '<div class="skeleton-rect" style="width:70%;height:12px;margin:4px auto 0"></div>'
           + '</div>';
       }
     }
@@ -1146,9 +1150,9 @@
       if (isDaytime) return 'Clear skies. Nice.';
       return 'Clear night. Sleep well. 🌙';
     }
-    if (code === 2) return 'A few clouds, nothing dramatic.';
-    if (code === 3) return 'Cloudy, but that\'s okay.';
-    if (code === 45 || code === 48) return 'Foggy out. Drive carefully. 🌫';
+    if (code === 2) return isDaytime ? 'A few clouds, nothing dramatic.' : 'Partly cloudy tonight.';
+    if (code === 3) return isDaytime ? 'Cloudy, but that\'s okay.' : 'Overcast tonight.';
+    if (code === 45 || code === 48) return isDaytime ? 'Foggy out. Drive carefully. 🌫' : 'Foggy tonight. Drive carefully. 🌫';
 
     return 'Weather loaded. You\'re all set.';
   }
