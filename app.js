@@ -45,7 +45,6 @@
     currentTemp: $('current-temp'),
     currentCondition: $('current-condition'),
     currentFeels: $('current-feels'),
-    heroSparkline: $('hero-sparkline'),
     statsInline: $('stats-inline'),
     tabNow: $('tab-now'),
     precipIndicator: $('precip-indicator'),
@@ -64,7 +63,8 @@
     btnShare: $('btn-share'),
     searchInput: $('search-input'),
     searchResults: $('search-results'),
-    bgGlow: $('bg-glow'),
+    weatherBgCurrent: $('weather-bg-current'),
+    weatherBgNext: $('weather-bg-next'),
   };
 
   // Append last-updated span to header via JS
@@ -428,32 +428,6 @@
     el.statsInline.innerHTML = parts.join(' <span class="stats-dot">·</span> ');
   }
 
-  function renderSparkline(hourlySlots) {
-    clearEl(el.heroSparkline);
-    if (!hourlySlots || hourlySlots.length === 0) return;
-    const slots = hourlySlots.slice(0, 5);
-    slots.forEach((slot, i) => {
-      const col = document.createElement('div');
-      col.className = 'spark-col';
-      const bar = document.createElement('div');
-      bar.className = 'spark-bar';
-      const height = Math.max(slot.prob, 4);
-      bar.style.height = `${height}%`;
-      if (slot.prob > 50) bar.classList.add('spark-high');
-      else if (slot.prob > 20) bar.classList.add('spark-med');
-      else bar.classList.add('spark-low');
-      if (isFirstRender) {
-        bar.classList.add('animate-bar');
-        bar.style.animationDelay = `${i * 80}ms`;
-      }
-      const label = document.createElement('span');
-      label.className = 'spark-label';
-      label.textContent = formatHour(slot.time);
-      col.appendChild(bar);
-      col.appendChild(label);
-      el.heroSparkline.appendChild(col);
-    });
-  }
 
   function rainSummary(minutelySlots) {
     if (!minutelySlots || minutelySlots.length === 0) {
@@ -495,35 +469,37 @@
   function renderNowTab(minutelySlots, dailySlots, hourlySlots, alerts) {
     clearEl(el.tabNow);
 
-    // Rain summary at top
-    const summary = rainSummary(minutelySlots);
-    const summaryEl = document.createElement('p');
-    summaryEl.id = 'rain-summary';
-    summaryEl.className = 'font-label';
-    summaryEl.textContent = summary.text;
-    if (summary.active) summaryEl.classList.add('rain-active');
-    else if (minutelySlots && minutelySlots.some(s => s.precip > 0)) summaryEl.classList.add('rain-expected');
-    el.tabNow.appendChild(summaryEl);
-
-    // Section label
-    const label = document.createElement('div');
-    label.className = 'section-label font-label';
-    label.textContent = 'Next 2 Hours';
-    el.tabNow.appendChild(label);
+    const hasPrecip = minutelySlots && minutelySlots.some(s => s.precip > 0);
 
     if (!minutelySlots || minutelySlots.length === 0) {
       const msg = document.createElement('div');
       msg.className = 'tab-unavailable font-label';
       msg.textContent = '15-min data unavailable for this location';
       el.tabNow.appendChild(msg);
+    } else if (!hasPrecip) {
+      // All clear — single consolidated message
+      const empty = document.createElement('div');
+      empty.className = 'now-empty font-label';
+      empty.innerHTML = '<div class="now-empty-icon">👍</div>All clear for the next 2 hours.';
+      el.tabNow.appendChild(empty);
     } else {
-      const allClear = minutelySlots.every(s => s.precip === 0);
-      if (allClear) {
-        const empty = document.createElement('div');
-        empty.className = 'now-empty font-label';
-        empty.innerHTML = '<div class="now-empty-icon">👍</div>All clear for the next 2 hours.';
-        el.tabNow.appendChild(empty);
-      } else {
+      // Rain summary at top
+      const summary = rainSummary(minutelySlots);
+      const summaryEl = document.createElement('p');
+      summaryEl.id = 'rain-summary';
+      summaryEl.className = 'font-label';
+      summaryEl.textContent = summary.text;
+      if (summary.active) summaryEl.classList.add('rain-active');
+      else summaryEl.classList.add('rain-expected');
+      el.tabNow.appendChild(summaryEl);
+
+      // Section label
+      const label = document.createElement('div');
+      label.className = 'section-label font-label';
+      label.textContent = 'Next 2 Hours';
+      el.tabNow.appendChild(label);
+
+      {
         const capped = minutelySlots.slice(0, 8);
         const maxPrecip = Math.max(...capped.map(s => s.precip), 0.01);
         capped.forEach((slot, idx) => {
@@ -973,6 +949,8 @@
 
   // --- Weather Background ---
 
+  let bgTransitionTimer = null;
+
   function applyWeatherBackground(weatherCode, dailySlots) {
     let isDaytime = true;
     if (dailySlots && dailySlots.length > 0) {
@@ -983,52 +961,63 @@
     }
 
     const light = isLightTheme();
-    let top, bottom, glowBg, glowOp;
+    let top, bottom;
     const code = weatherCode;
+    const apparentTemp = lastWeather ? lastWeather.current.apparent_temperature : 70;
 
-    if (code === 0 || code === 1) {
+    // Check hot gradient first
+    if (isDaytime && apparentTemp > 90 && light) {
+      top = '#f3904f'; bottom = '#fa709a';
+    } else if (code === 0 || code === 1) {
       if (isDaytime) {
-        if (light) { top = '#e0f2fe'; bottom = '#f0f9ff'; }
-        else { top = '#0a1628'; bottom = '#0d2137'; }
-        glowBg = light ? '' : 'radial-gradient(circle, rgba(56,189,248,0.06), transparent)';
-        glowOp = light ? '0' : '1';
+        if (light) { top = '#4facfe'; bottom = '#00f2fe'; }
+        else { top = '#0a1e3d'; bottom = '#0d2847'; }
       } else {
-        // Night always dark even in light mode
-        top = '#1e293b'; bottom = '#334155';
-        glowBg = ''; glowOp = '0';
+        top = '#0c1445'; bottom = '#1a237e';
       }
-    } else if (code === 2 || code === 3) {
-      if (light) { top = '#e2e8f0'; bottom = '#f1f5f9'; }
-      else { top = code === 2 ? '#0d1f35' : '#111827'; bottom = code === 2 ? '#111827' : '#0f172a'; }
-      glowBg = ''; glowOp = '0';
+    } else if (code === 2) {
+      if (light) { top = '#89b4fa'; bottom = '#a5c8ff'; }
+      else { top = '#0d1f35'; bottom = '#111827'; }
+    } else if (code === 3) {
+      if (light) { top = '#8e9eab'; bottom = '#eef2f3'; }
+      else { top = '#111827'; bottom = '#0f172a'; }
     } else if (code === 45 || code === 48) {
-      if (light) { top = '#e2e8f0'; bottom = '#f1f5f9'; }
+      if (light) { top = '#b5bdc8'; bottom = '#dfe4ea'; }
       else { top = '#111820'; bottom = '#0d1520'; }
-      glowBg = ''; glowOp = '0';
     } else if (code >= 71 && code <= 77) {
-      if (light) { top = '#f1f5f9'; bottom = '#ffffff'; }
+      if (light) { top = '#c9d6e3'; bottom = '#f5f7fa'; }
       else { top = '#101828'; bottom = '#1a2436'; }
-      glowBg = ''; glowOp = '0';
     } else if (code >= 95 && code <= 99) {
-      if (light) { top = '#94a3b8'; bottom = '#cbd5e1'; }
-      else { top = '#0c0a1e'; bottom = '#120824'; }
-      glowBg = light ? '' : 'radial-gradient(circle, rgba(139,92,246,0.08), transparent)';
-      glowOp = light ? '0' : '1';
-    } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      if (light) { top = '#cbd5e1'; bottom = '#e2e8f0'; }
+      if (light) { top = '#373b44'; bottom = '#4f5b62'; }
+      else { top = '#120a24'; bottom = '#1a0830'; }
+    } else if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+      const heavy = code >= 63 || code >= 81;
+      if (light) {
+        top = heavy ? '#3d4f5f' : '#616d86';
+        bottom = heavy ? '#636b74' : '#96a2b8';
+      } else {
+        top = '#0d1a2d'; bottom = '#0a1525';
+      }
+    } else if (code >= 51 && code <= 57) {
+      if (light) { top = '#616d86'; bottom = '#96a2b8'; }
       else { top = '#0a1525'; bottom = '#060f1a'; }
-      glowBg = light ? '' : 'radial-gradient(circle, rgba(14,116,144,0.07), transparent)';
-      glowOp = light ? '0' : '1';
     } else {
-      if (light) { top = '#cbd5e1'; bottom = '#e2e8f0'; }
+      if (light) { top = '#616d86'; bottom = '#96a2b8'; }
       else { top = '#0a1525'; bottom = '#060f1a'; }
-      glowBg = ''; glowOp = '0';
     }
 
-    document.body.style.setProperty('--weather-top', top);
-    document.body.style.setProperty('--weather-bottom', bottom);
-    el.bgGlow.style.background = glowBg;
-    el.bgGlow.style.opacity = glowOp;
+    // Crossfade gradient transition
+    const newGrad = `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
+    if (bgTransitionTimer) clearTimeout(bgTransitionTimer);
+
+    el.weatherBgNext.style.background = newGrad;
+    el.weatherBgNext.style.opacity = '1';
+
+    bgTransitionTimer = setTimeout(() => {
+      el.weatherBgCurrent.style.background = newGrad;
+      el.weatherBgNext.style.opacity = '0';
+      bgTransitionTimer = null;
+    }, 850);
   }
 
   // --- Loading Skeleton ---
@@ -1140,15 +1129,17 @@
 
     if (c.wind_speed_10m > 30) return 'Super windy out there. Hold your hat! 💨';
 
-    const uv = dailySlots && dailySlots[0] ? dailySlots[0].uvMax : 0;
-    if (uv > 8) return 'UV is extreme today. Sunscreen is a must. 🧴';
-    if (uv > 5) return 'UV is high — don\'t skip sunscreen.';
-
+    // Daytime check (used for UV and clear conditions)
     let isDaytime = true;
     if (dailySlots && dailySlots.length > 0) {
       const now = Date.now();
       isDaytime = now > new Date(dailySlots[0].sunrise).getTime() && now < new Date(dailySlots[0].sunset).getTime();
     }
+
+    // UV only relevant during daytime
+    const uv = dailySlots && dailySlots[0] ? dailySlots[0].uvMax : 0;
+    if (isDaytime && uv > 8) return 'UV is extreme today. Sunscreen is a must. 🧴';
+    if (isDaytime && uv > 5) return 'UV is high — don\'t skip sunscreen.';
 
     if (code <= 1) {
       if (isDaytime && temp >= 65 && temp <= 80) return 'Perfect weather. Go enjoy it! ☀️';
@@ -1249,7 +1240,6 @@
     const briefingEl = $('weather-briefing');
     if (briefingEl) briefingEl.textContent = getWeatherBriefing(weather, dailySlots, hourlySlots);
     renderFeelsTrend(current, hourlySlots);
-    renderSparkline(hourlySlots);
     renderStatsInline(current);
     renderAlertBanner(activeAlerts);
     renderPrecipIndicator(minutelySlots);
@@ -1733,19 +1723,20 @@
     const light = isLightTheme();
     const code = weatherCode;
     if (code === 0 || code === 1) {
-      if (!isDaytime) return { top: '#1e293b', bottom: '#334155' };
-      return light ? { top: '#e0f2fe', bottom: '#f0f9ff' } : { top: '#0a1628', bottom: '#0d2137' };
+      if (!isDaytime) return { top: '#0c1445', bottom: '#1a237e' };
+      return light ? { top: '#4facfe', bottom: '#00f2fe' } : { top: '#0a1e3d', bottom: '#0d2847' };
     } else if (code === 2 || code === 3) {
-      return light ? { top: '#e2e8f0', bottom: '#f1f5f9' }
+      return light
+        ? (code === 2 ? { top: '#89b4fa', bottom: '#a5c8ff' } : { top: '#8e9eab', bottom: '#eef2f3' })
         : { top: code === 2 ? '#0d1f35' : '#111827', bottom: code === 2 ? '#111827' : '#0f172a' };
     } else if (code === 45 || code === 48) {
-      return light ? { top: '#e2e8f0', bottom: '#f1f5f9' } : { top: '#111820', bottom: '#0d1520' };
+      return light ? { top: '#b5bdc8', bottom: '#dfe4ea' } : { top: '#111820', bottom: '#0d1520' };
     } else if (code >= 71 && code <= 77) {
-      return light ? { top: '#f1f5f9', bottom: '#ffffff' } : { top: '#101828', bottom: '#1a2436' };
+      return light ? { top: '#c9d6e3', bottom: '#f5f7fa' } : { top: '#101828', bottom: '#1a2436' };
     } else if (code >= 95 && code <= 99) {
-      return light ? { top: '#94a3b8', bottom: '#cbd5e1' } : { top: '#0c0a1e', bottom: '#120824' };
+      return light ? { top: '#373b44', bottom: '#4f5b62' } : { top: '#120a24', bottom: '#1a0830' };
     } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      return light ? { top: '#cbd5e1', bottom: '#e2e8f0' } : { top: '#0a1525', bottom: '#060f1a' };
+      return light ? { top: '#616d86', bottom: '#96a2b8' } : { top: '#0d1a2d', bottom: '#0a1525' };
     }
     return light ? { top: '#cbd5e1', bottom: '#e2e8f0' } : { top: '#0a1525', bottom: '#060f1a' };
   }
