@@ -751,7 +751,7 @@
       const today = daily[0];
       lines.push(`📊 High ${displayTemp(today.maxTemp)} / Low ${displayTemp(today.minTemp)} · UV ${Math.round(today.uvMax)} ${uvLabel(today.uvMax)}`);
     }
-    lines.push('🕐 via WXNOW · wxnow.app');
+    lines.push('🕐 via WXNOW · wxnow.vercel.app');
     return lines.join('\n');
   }
 
@@ -865,7 +865,7 @@
   async function fetchAlerts(lat, lon) {
     const res = await fetch(
       `https://api.weather.gov/alerts/active?point=${lat},${lon}`,
-      { headers: { 'User-Agent': 'WXNOW/1.0 (wxnow.app)', 'Accept': 'application/geo+json' } }
+      { headers: { 'User-Agent': 'WXNOW/1.0 (wxnow.vercel.app)', 'Accept': 'application/geo+json' } }
     );
     if (!res.ok) throw new Error(`NWS ${res.status}`);
     const data = await res.json();
