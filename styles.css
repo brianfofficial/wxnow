@@ -920,3 +920,102 @@ button, input, .tab-btn, .search-result-item, .daily-row, .now-row, .alert-card 
 
 /* Onboarding always dark */
 #onboarding { color: #e2e8f0; }
+
+/* === Animations === */
+
+/* Entrance animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+/* Tab transitions */
+@keyframes tabExit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-exit { animation: tabExit 0.15s ease-out forwards; }
+.tab-enter { animation: tabEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Refresh spin */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.header-btn-icon.spinning {
+  animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+/* Sparkline bar pulse */
+@keyframes barPulse {
+  0% { transform: scaleY(0); }
+  60% { transform: scaleY(1.15); }
+  100% { transform: scaleY(1); }
+}
+.spark-bar {
+  transform-origin: bottom;
+}
+.spark-bar.animate-bar {
+  animation: barPulse 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Precip bar fill animation */
+.now-bar {
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 7-day temp bar animation */
+.daily-prob-bar {
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Theme transition */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease,
+              fill 0.3s ease !important;
+}
+
+/* Pull-to-refresh */
+#pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  transition: height 0.2s ease;
+  z-index: 50;
+}
+#pull-indicator.active { color: var(--accent); }
+#pull-indicator.refreshing #pull-text {
+  display: inline-block;
+  animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

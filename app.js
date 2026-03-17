@@ -101,6 +101,8 @@
   let lastFetchTime = null;
   let deferredInstallPrompt = null;
   let fetchId = 0;
+  let isFirstRender = true;
+  let tabTransitioning = false;
 
   try { if (localStorage.getItem('wxnow-unit') === 'c') useFahrenheit = false; } catch {}
 
@@ -131,13 +133,34 @@
     };
   }
 
-  // Tab switching
+  // Tab switching with animated transitions
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (tabTransitioning) return;
+      const currentPanel = document.querySelector('.tab-panel.active');
+      const nextPanel = $(btn.dataset.tab);
+      if (currentPanel === nextPanel) return;
+
+      tabTransitioning = true;
       document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
       btn.classList.add('active');
-      $(btn.dataset.tab).classList.add('active');
+
+      if (currentPanel) {
+        currentPanel.classList.add('tab-exit');
+        setTimeout(() => {
+          currentPanel.classList.remove('active', 'tab-exit');
+          nextPanel.classList.add('active', 'tab-enter');
+          // Animate 7-day bars if switching to that tab
+          if (btn.dataset.tab === 'tab-7day') animate7DayBars();
+          setTimeout(() => {
+            nextPanel.classList.remove('tab-enter');
+            tabTransitioning = false;
+          }, 250);
+        }, 150);
+      } else {
+        nextPanel.classList.add('active');
+        tabTransitioning = false;
+      }
     });
   });
 
@@ -238,7 +261,7 @@
     clearEl(el.heroSparkline);
     if (!hourlySlots || hourlySlots.length === 0) return;
     const slots = hourlySlots.slice(0, 6);
-    slots.forEach((slot) => {
+    slots.forEach((slot, i) => {
       const col = document.createElement('div');
       col.className = 'spark-col';
       const bar = document.createElement('div');
@@ -248,6 +271,10 @@
       if (slot.prob > 50) bar.classList.add('spark-high');
       else if (slot.prob > 20) bar.classList.add('spark-med');
       else bar.classList.add('spark-low');
+      if (isFirstRender) {
+        bar.classList.add('animate-bar');
+        bar.style.animationDelay = `${i * 80}ms`;
+      }
       const label = document.createElement('span');
       label.className = 'spark-label';
       label.textContent = formatHour(slot.time);
@@ -331,7 +358,14 @@
       barWrap.className = 'now-bar-wrap';
       const bar = document.createElement('div');
       bar.className = 'now-bar';
-      bar.style.width = `${Math.max((slot.precip / maxPrecip) * 100, 0)}%`;
+      const finalWidth = `${Math.max((slot.precip / maxPrecip) * 100, 0)}%`;
+      if (isFirstRender) {
+        bar.style.width = '0%';
+        bar.style.transitionDelay = `${idx * 60}ms`;
+        requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = finalWidth; }));
+      } else {
+        bar.style.width = finalWidth;
+      }
       barWrap.appendChild(bar);
 
       const temp = document.createElement('span');
@@ -564,6 +598,7 @@
       probBar.className = 'daily-prob-bar';
       const prob = day.precipProb;
       probBar.style.background = prob > 50 ? '#0284c7' : prob > 20 ? '#38bdf8' : '#1e293b';
+      probBar.dataset.finalWidth = `${prob}%`;
       probBar.style.width = `${prob}%`;
       probWrap.appendChild(probBar);
 
@@ -1002,6 +1037,76 @@
     return 'Weather data loaded.';
   }
 
+  // --- Animations ---
+
+  function animateEntrance() {
+    // Remove any existing animations first
+    document.querySelectorAll('.animate-in').forEach(e => e.classList.remove('animate-in'));
+
+    const targets = [
+      { sel: '#current', delay: 0 },
+      { sel: '#rain-summary', delay: 60 },
+      { sel: '#alerts-container', delay: 120 },
+      { sel: '#stats-bar', delay: 180 },
+      { sel: '#now-always .section-label', delay: 240 },
+      { sel: '.now-row', delay: 280, stagger: 40 },
+      { sel: '#briefing-card', delay: 640 },
+      { sel: '#tabs', delay: 700 },
+    ];
+
+    targets.forEach(({ sel, delay, stagger }) => {
+      const els = Array.from(document.querySelectorAll(sel));
+      els.forEach((e, i) => {
+        if (!e) return;
+        e.style.animationDelay = `${delay + (stagger ? i * stagger : 0)}ms`;
+        void e.offsetWidth;
+        e.classList.add('animate-in');
+      });
+    });
+  }
+
+  let tempAnimFrame = null;
+  function animateTemperature(targetF) {
+    if (tempAnimFrame) cancelAnimationFrame(tempAnimFrame);
+    if (targetF == null || isNaN(targetF)) {
+      el.currentTemp.textContent = '—';
+      return;
+    }
+    const startTime = performance.now();
+    const duration = 600;
+    const startVal = 0;
+    const endVal = targetF;
+
+    function easeOutExpo(t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const current = startVal + (endVal - startVal) * easeOutExpo(progress);
+      el.currentTemp.textContent = displayTemp(current);
+      if (progress < 1) {
+        tempAnimFrame = requestAnimationFrame(tick);
+      } else {
+        el.currentTemp.textContent = displayTemp(endVal);
+        tempAnimFrame = null;
+      }
+    }
+    tempAnimFrame = requestAnimationFrame(tick);
+  }
+
+  function animate7DayBars() {
+    const bars = document.querySelectorAll('.daily-prob-bar');
+    bars.forEach((bar, i) => {
+      const finalWidth = bar.dataset.finalWidth;
+      if (!finalWidth) return;
+      bar.style.width = '0%';
+      bar.style.transitionDelay = `${i * 80}ms`;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        bar.style.width = finalWidth;
+      }));
+    });
+  }
+
   // --- Main render orchestrator ---
 
   function render(weather, location) {
@@ -1012,6 +1117,11 @@
     const dailySlots = processDaily(weather.daily);
 
     renderCurrent(current, location);
+
+    // Animate temperature counter on first render
+    if (isFirstRender) {
+      animateTemperature(current.temperature_2m);
+    }
 
     // Weather briefing
     const briefingEl = $('weather-briefing');
@@ -1041,6 +1151,15 @@
     cacheTimestamp = Date.now();
     lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     updateDataAge(null);
+
+    // Stop refresh spinner
+    el.btnRefresh.classList.remove('spinning');
+
+    // Entrance animation on first render after fetch
+    if (isFirstRender) {
+      animateEntrance();
+      isFirstRender = false;
+    }
 
     if (!refreshInterval) {
       refreshInterval = setInterval(() => {
@@ -1158,6 +1277,7 @@
   // --- Load ---
 
   const debouncedFetch = debounce(async (lat, lon, overrideLocation) => {
+    isFirstRender = true;
     const myFetchId = ++fetchId;
     try {
       lastFetchTime = Date.now();
@@ -1232,10 +1352,8 @@
   }
 
   el.btnRefresh.addEventListener('click', () => {
+    el.btnRefresh.classList.add('spinning');
     if (savedLat !== null && savedLon !== null) {
-      el.loading.textContent = '\u25CC';
-      el.loading.classList.remove('hidden');
-      el.weatherContent.classList.add('hidden');
       debouncedFetch(savedLat, savedLon);
     } else {
       load();
@@ -1446,6 +1564,8 @@
   btnTheme.textContent = isLightTheme() ? '🌙' : '☀';
 
   function toggleTheme() {
+    document.documentElement.classList.add('theme-transitioning');
+    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 500);
     const current = document.documentElement.dataset.theme || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
@@ -2117,4 +2237,64 @@
       hideSearchResults();
     }
   });
+
+  // --- Pull-to-Refresh ---
+  let pullStartY = 0;
+  let pulling = false;
+  let pullRefreshing = false;
+  const pullIndicator = $('pull-indicator');
+  const pullText = $('pull-text');
+
+  document.addEventListener('touchstart', (e) => {
+    if (window.scrollY === 0 && !pullRefreshing) {
+      pullStartY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const pullDistance = e.touches[0].clientY - pullStartY;
+    if (pullDistance < 0) { pulling = false; return; }
+
+    const capped = Math.min(pullDistance, 120);
+    pullIndicator.style.height = `${capped * 0.5}px`;
+
+    if (capped >= 60) {
+      pullText.textContent = '↻ Release to refresh';
+      pullIndicator.classList.add('active');
+    } else {
+      pullText.textContent = '↓ Pull to refresh';
+      pullIndicator.classList.remove('active');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', async () => {
+    if (!pulling) return;
+    pulling = false;
+
+    const height = parseInt(pullIndicator.style.height) || 0;
+    if (height >= 30 && savedLat !== null && !pullRefreshing) {
+      pullRefreshing = true;
+      pullText.textContent = '↻';
+      pullIndicator.classList.add('refreshing');
+      pullIndicator.style.height = '40px';
+
+      isFirstRender = true;
+      debouncedFetch(savedLat, savedLon);
+
+      // Wait for render to complete (fetchId change signals completion)
+      const waitForRender = () => {
+        setTimeout(() => {
+          pullIndicator.classList.remove('refreshing', 'active');
+          pullIndicator.style.height = '0';
+          pullRefreshing = false;
+        }, 800);
+      };
+      waitForRender();
+    } else {
+      pullIndicator.style.height = '0';
+      pullIndicator.classList.remove('active');
+    }
+  }, { passive: true });
 })();
