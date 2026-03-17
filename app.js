@@ -75,6 +75,11 @@
   lastUpdatedEl.id = 'last-updated';
   el.header.appendChild(lastUpdatedEl);
 
+  // Data age indicator
+  const dataAgeEl = document.createElement('span');
+  dataAgeEl.id = 'data-age';
+  el.header.appendChild(dataAgeEl);
+
   // Helper: format ISO time string to locale time
   function formatTime(isoStr) {
     return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -808,6 +813,120 @@
     el.bgGlow.style.opacity = glowOp;
   }
 
+  // --- Loading Skeleton ---
+
+  function renderSkeleton() {
+    el.loading.classList.add('hidden');
+    el.weatherContent.classList.remove('hidden');
+    const hero = el.weatherContent.querySelector('#current');
+    const statsBar = el.statsBar;
+    const tabs = el.weatherContent.querySelector('#tabs');
+    const nowAlways = el.nowAlways;
+
+    // Hero skeleton
+    if (hero) {
+      const heroLeft = hero.querySelector('#hero-left');
+      if (heroLeft) {
+        heroLeft.innerHTML = '<div class="skeleton-hero">'
+          + '<div class="skeleton-rect" style="width:60%;height:48px"></div>'
+          + '<div class="skeleton-rect" style="width:40%;height:14px"></div>'
+          + '<div class="skeleton-rect" style="width:30%;height:12px"></div>'
+          + '</div>';
+      }
+    }
+
+    // Stats skeleton
+    if (statsBar) {
+      clearEl(statsBar);
+      const wrap = document.createElement('div');
+      wrap.className = 'skeleton-stats';
+      for (let i = 0; i < 4; i++) {
+        const r = document.createElement('div');
+        r.className = 'skeleton-rect';
+        r.style.cssText = 'width:24%;height:56px;flex-shrink:0';
+        wrap.appendChild(r);
+      }
+      statsBar.appendChild(wrap);
+    }
+
+    // Tabs skeleton (just show 3 rects)
+    if (tabs) {
+      const tabWrap = document.createElement('div');
+      tabWrap.className = 'skeleton-tabs';
+      for (let i = 0; i < 3; i++) {
+        const r = document.createElement('div');
+        r.className = 'skeleton-rect';
+        r.style.cssText = 'width:33%;height:32px';
+        tabWrap.appendChild(r);
+      }
+      tabs.style.visibility = 'hidden';
+    }
+
+    // Now-always section: 6 row placeholders
+    if (nowAlways) {
+      clearEl(nowAlways);
+      const rows = document.createElement('div');
+      rows.className = 'skeleton-rows';
+      for (let i = 0; i < 6; i++) {
+        const r = document.createElement('div');
+        r.className = 'skeleton-rect';
+        r.style.cssText = 'width:100%;height:40px';
+        rows.appendChild(r);
+      }
+      nowAlways.appendChild(rows);
+    }
+  }
+
+  // --- Offline Cache ---
+
+  function saveCache() {
+    try {
+      const data = {
+        weather: lastWeather,
+        location: lastLocation,
+        lat: savedLat,
+        lon: savedLon,
+        alerts: activeAlerts,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem('wxnow-cache', JSON.stringify(data));
+    } catch { /* quota exceeded or private browsing */ }
+  }
+
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem('wxnow-cache');
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || !data.weather || !data.timestamp) return null;
+      // Reject if > 6 hours old as primary source, but still return for stale display
+      return data;
+    } catch { return null; }
+  }
+
+  function updateDataAge(timestamp) {
+    if (!timestamp) { dataAgeEl.textContent = ''; return; }
+    const age = Date.now() - timestamp;
+    const mins = Math.floor(age / 60000);
+    const hours = Math.floor(age / 3600000);
+
+    if (mins < 5) {
+      dataAgeEl.textContent = '';
+      dataAgeEl.style.color = '';
+    } else if (mins < 60) {
+      dataAgeEl.textContent = ` · ${mins}m ago`;
+      dataAgeEl.style.color = '#475569';
+    } else if (hours < 6) {
+      dataAgeEl.textContent = ` · ${hours}h ago`;
+      dataAgeEl.style.color = '#f59e0b';
+    } else {
+      dataAgeEl.textContent = ' · Stale data';
+      dataAgeEl.style.color = '#ef4444';
+    }
+  }
+
+  let cacheTimestamp = null;
+
   // --- Weather Briefing (personality) ---
 
   function getWeatherBriefing(weather, dailySlots, hourlySlots) {
@@ -902,8 +1021,14 @@
     el.error.classList.add('hidden');
     el.weatherContent.classList.remove('hidden');
 
+    // Restore tabs visibility after skeleton
+    const tabsEl = el.weatherContent.querySelector('#tabs');
+    if (tabsEl) tabsEl.style.visibility = '';
+
     // Update last-updated timestamp
+    cacheTimestamp = Date.now();
     lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    updateDataAge(null);
 
     if (!refreshInterval) {
       refreshInterval = setInterval(() => {
@@ -1037,34 +1162,59 @@
       lastWeather = weather;
       lastLocation = location;
       render(weather, location);
+      saveCache();
     } catch {
-      if (myFetchId === fetchId) showError('Failed to load weather data. Tap to retry.', true);
+      if (myFetchId === fetchId && !lastWeather) showError('Failed to load weather data. Tap to retry.', true);
     }
   }, 300);
 
   async function load() {
-    el.loading.textContent = '\u25CC';
-    el.loading.classList.remove('hidden');
-    el.error.classList.add('hidden');
-    el.weatherContent.classList.add('hidden');
+    // Try loading cached data immediately
+    const cached = loadCache();
+    let showedCache = false;
+
+    if (cached) {
+      // Restore cached state immediately
+      lastWeather = cached.weather;
+      lastLocation = cached.location;
+      savedLat = cached.lat;
+      savedLon = cached.lon;
+      activeAlerts = cached.alerts || [];
+      cacheTimestamp = cached.timestamp;
+      render(cached.weather, cached.location);
+      updateDataAge(cached.timestamp);
+      lastUpdatedEl.textContent = `Updated ${new Date(cached.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+      showedCache = true;
+    } else {
+      // No cache — show skeleton
+      renderSkeleton();
+    }
 
     if (!navigator.onLine) {
-      showError('You appear to be offline. Tap to retry when connected.', true);
+      if (!showedCache) {
+        showError('No connection. Tap to retry when connected.', true);
+      }
       return;
     }
 
+    // Fetch fresh data (background refresh if cache was shown)
     try {
       const pos = await getPosition();
       savedLat = pos.coords.latitude;
       savedLon = pos.coords.longitude;
       debouncedFetch(savedLat, savedLon);
     } catch (err) {
-      if (err.code === 1) {
-        showError('Location access denied. Please enable location services in your device settings.', false);
-      } else if (err.code === 3) {
-        showError('Location request timed out. Tap to retry.', true);
-      } else {
-        showError(`Location error: ${err.message}. Tap to retry.`, true);
+      if (!showedCache) {
+        if (err.code === 1) {
+          showError('Location access denied. Please enable location services in your device settings.', false);
+        } else if (err.code === 3) {
+          showError('Location request timed out. Tap to retry.', true);
+        } else {
+          showError(`Location error: ${err.message}. Tap to retry.`, true);
+        }
+      } else if (savedLat !== null) {
+        // Have cached coords, try refreshing with those
+        debouncedFetch(savedLat, savedLon);
       }
     }
   }

@@ -605,6 +605,54 @@ button, input, .tab-btn, .search-result-item, .daily-row, .now-row, .alert-card 
   font-size: 14px;
 }
 
+/* Data age indicator */
+#data-age {
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Loading skeleton */
+.skeleton-rect {
+  background: #0f172a;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-rect::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(56,189,248,0.04) 40%, rgba(56,189,248,0.08) 50%, rgba(56,189,248,0.04) 60%, transparent 100%);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.skeleton-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+}
+.skeleton-stats {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 12px 0;
+}
+.skeleton-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 12px;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* Weather briefing */
 .weather-briefing {
   font-family: 'DM Mono', monospace;

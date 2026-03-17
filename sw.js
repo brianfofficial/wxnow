@@ -1,4 +1,5 @@
-const CACHE_NAME = 'wxnow-v3';
+const CACHE_NAME = 'wxnow-v4';
+const API_CACHE = 'wxnow-api-cache';
 const STATIC_ASSETS = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -11,7 +12,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE_NAME && k !== API_CACHE).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -20,13 +21,13 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Network-first for API calls
-  if (url.hostname.includes('open-meteo.com') || url.hostname.includes('nominatim')) {
+  // Network-first for API calls (Open-Meteo, Nominatim, NWS)
+  if (url.hostname.includes('open-meteo.com') || url.hostname.includes('nominatim') || url.hostname.includes('weather.gov')) {
     e.respondWith(
       fetch(e.request)
         .then((res) => {
           const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          caches.open(API_CACHE).then((cache) => cache.put(e.request, clone));
           return res;
         })
         .catch(() => caches.match(e.request))
