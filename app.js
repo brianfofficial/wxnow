@@ -103,8 +103,183 @@
   let fetchId = 0;
   let isFirstRender = true;
   let tabTransitioning = false;
+  let currentSavedLocation = null; // { name, lat, lon } or null for GPS
 
   try { if (localStorage.getItem('wxnow-unit') === 'c') useFahrenheit = false; } catch {}
+
+  // --- Saved Locations ---
+
+  function getSavedLocations() {
+    try {
+      const raw = localStorage.getItem('wxnow-saved-locations');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  function setSavedLocations(locs) {
+    try { localStorage.setItem('wxnow-saved-locations', JSON.stringify(locs.slice(0, 5))); } catch {}
+  }
+
+  function addSavedLocation(name, lat, lon) {
+    const locs = getSavedLocations();
+    const roundLat = Math.round(lat * 100) / 100;
+    const roundLon = Math.round(lon * 100) / 100;
+    const exists = locs.some(l =>
+      Math.round(l.lat * 100) / 100 === roundLat &&
+      Math.round(l.lon * 100) / 100 === roundLon
+    );
+    if (exists) return false;
+    if (locs.length >= 5) {
+      showToast('Max 5 locations. Remove one first.');
+      return false;
+    }
+    locs.push({ name, lat, lon });
+    setSavedLocations(locs);
+    return true;
+  }
+
+  function removeSavedLocation(lat, lon) {
+    const locs = getSavedLocations().filter(l =>
+      !(Math.round(l.lat * 100) / 100 === Math.round(lat * 100) / 100 &&
+        Math.round(l.lon * 100) / 100 === Math.round(lon * 100) / 100)
+    );
+    setSavedLocations(locs);
+  }
+
+  function initiateRemove(chip) {
+    if (chip.classList.contains('confirm-remove')) return;
+    chip.classList.add('confirm-remove');
+    const tempEl = chip.querySelector('.loc-chip-temp');
+    const origTemp = tempEl ? tempEl.textContent : '';
+    if (tempEl) tempEl.textContent = '✕';
+    const timer = setTimeout(() => {
+      chip.classList.remove('confirm-remove');
+      if (tempEl) tempEl.textContent = origTemp;
+    }, 2000);
+    chip.addEventListener('click', function removeHandler() {
+      clearTimeout(timer);
+      const lat = parseFloat(chip.dataset.lat);
+      const lon = parseFloat(chip.dataset.lon);
+      removeSavedLocation(lat, lon);
+      if (currentSavedLocation &&
+          Math.round(currentSavedLocation.lat * 100) / 100 === Math.round(lat * 100) / 100 &&
+          Math.round(currentSavedLocation.lon * 100) / 100 === Math.round(lon * 100) / 100) {
+        currentSavedLocation = null;
+        restoreGps();
+      }
+      renderLocationChips();
+      chip.removeEventListener('click', removeHandler);
+    }, { once: true });
+  }
+
+  function handleChipClick(chip) {
+    if (chip.classList.contains('confirm-remove')) return;
+    if (chip.classList.contains('loc-chip-gps')) {
+      currentSavedLocation = null;
+      el.searchInput.value = '';
+      el.btnSearchClear.classList.add('hidden');
+      isFirstRender = true;
+      getPosition().then(pos => {
+        savedLat = pos.coords.latitude;
+        savedLon = pos.coords.longitude;
+        debouncedFetch(savedLat, savedLon);
+        renderLocationChips();
+      }).catch(() => {
+        showToast('Location unavailable');
+        if (lastWeather) renderLocationChips();
+      });
+      renderLocationChips();
+      return;
+    }
+    const lat = parseFloat(chip.dataset.lat);
+    const lon = parseFloat(chip.dataset.lon);
+    const name = chip.querySelector('.loc-chip-name').textContent;
+    currentSavedLocation = { name, lat, lon };
+    savedLat = lat;
+    savedLon = lon;
+    lastLocation = name;
+    el.searchInput.value = name;
+    el.btnSearchClear.classList.remove('hidden');
+    isFirstRender = true;
+    debouncedFetch(lat, lon, name);
+    renderLocationChips();
+  }
+
+  function renderLocationChips() {
+    const container = $('saved-locations');
+    if (!container) return;
+    clearEl(container);
+
+    // GPS chip
+    const gpsChip = document.createElement('button');
+    gpsChip.className = 'loc-chip loc-chip-gps';
+    if (!currentSavedLocation) gpsChip.classList.add('active');
+    gpsChip.dataset.lat = '';
+    gpsChip.dataset.lon = '';
+    const gpsName = document.createElement('span');
+    gpsName.className = 'loc-chip-name';
+    gpsName.textContent = '📍 GPS';
+    const gpsTemp = document.createElement('span');
+    gpsTemp.className = 'loc-chip-temp';
+    gpsTemp.textContent = (lastWeather && !currentSavedLocation) ? displayTemp(lastWeather.current.temperature_2m) : '';
+    gpsChip.appendChild(gpsName);
+    gpsChip.appendChild(gpsTemp);
+    gpsChip.addEventListener('click', () => handleChipClick(gpsChip));
+    container.appendChild(gpsChip);
+
+    // Saved locations
+    const saved = getSavedLocations();
+    saved.forEach(loc => {
+      const chip = document.createElement('button');
+      chip.className = 'loc-chip';
+      chip.dataset.lat = loc.lat;
+      chip.dataset.lon = loc.lon;
+      if (currentSavedLocation &&
+          Math.round(loc.lat * 100) === Math.round(currentSavedLocation.lat * 100) &&
+          Math.round(loc.lon * 100) === Math.round(currentSavedLocation.lon * 100)) {
+        chip.classList.add('active');
+      }
+      const nameEl = document.createElement('span');
+      nameEl.className = 'loc-chip-name';
+      nameEl.textContent = loc.name;
+      const tempEl = document.createElement('span');
+      tempEl.className = 'loc-chip-temp';
+      tempEl.textContent = '—';
+      chip.appendChild(nameEl);
+      chip.appendChild(tempEl);
+      chip.addEventListener('click', () => handleChipClick(chip));
+
+      // Long-press / right-click removal
+      let pressTimer;
+      chip.addEventListener('touchstart', () => {
+        pressTimer = setTimeout(() => initiateRemove(chip), 500);
+      }, { passive: true });
+      chip.addEventListener('touchend', () => clearTimeout(pressTimer), { passive: true });
+      chip.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true });
+      chip.addEventListener('contextmenu', (e) => { e.preventDefault(); initiateRemove(chip); });
+
+      container.appendChild(chip);
+    });
+  }
+
+  async function updateChipTemps() {
+    const saved = getSavedLocations();
+    if (saved.length === 0) return;
+    const results = await Promise.all(saved.map(async (loc) => {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m&temperature_unit=fahrenheit&timezone=auto`
+        );
+        const data = await res.json();
+        return { lat: loc.lat, lon: loc.lon, temp: data.current.temperature_2m };
+      } catch { return null; }
+    }));
+    results.forEach(r => {
+      if (!r) return;
+      const chip = document.querySelector(`.loc-chip[data-lat="${r.lat}"][data-lon="${r.lon}"] .loc-chip-temp`);
+      if (chip) chip.textContent = displayTemp(r.temp);
+    });
+  }
 
   // Theme init (blocking script in <head> handles the data attribute; this syncs button text)
   function isLightTheme() {
@@ -1155,6 +1330,19 @@
     // Stop refresh spinner
     el.btnRefresh.classList.remove('spinning');
 
+    // Update GPS chip temp
+    const gpsChipTemp = document.querySelector('.loc-chip-gps .loc-chip-temp');
+    if (gpsChipTemp && !currentSavedLocation) {
+      gpsChipTemp.textContent = displayTemp(current.temperature_2m);
+    }
+    // Update active saved chip temp
+    if (currentSavedLocation) {
+      const activeChipTemp = document.querySelector('.loc-chip.active .loc-chip-temp');
+      if (activeChipTemp) activeChipTemp.textContent = displayTemp(current.temperature_2m);
+    }
+    // Background update all chip temps
+    updateChipTemps();
+
     // Entrance animation on first render after fetch
     if (isFirstRender) {
       animateEntrance();
@@ -1531,6 +1719,7 @@
     // Hide loading spinner since onboarding is showing
     el.loading.classList.add('hidden');
   } else {
+    renderLocationChips();
     load();
   }
 
@@ -1557,6 +1746,8 @@
     el.btnUnit.textContent = useFahrenheit ? '°C' : '°F';
     try { localStorage.setItem('wxnow-unit', useFahrenheit ? 'f' : 'c'); } catch {}
     render(lastWeather, lastLocation);
+    renderLocationChips();
+    updateChipTemps();
   });
 
   // Theme toggle
@@ -2159,22 +2350,21 @@
     el.searchInput.value = '';
     el.btnSearchClear.classList.add('hidden');
     hideSearchResults();
-    el.loading.textContent = '\u25CC';
-    el.loading.classList.remove('hidden');
-    el.weatherContent.classList.add('hidden');
+    currentSavedLocation = null;
+    isFirstRender = true;
     getPosition().then(pos => {
       savedLat = pos.coords.latitude;
       savedLon = pos.coords.longitude;
       debouncedFetch(savedLat, savedLon);
+      renderLocationChips();
     }).catch(() => {
-      // GPS denied — just re-render with existing data if available
       if (lastWeather) {
-        el.loading.classList.add('hidden');
-        el.weatherContent.classList.remove('hidden');
+        renderLocationChips();
       } else {
         showError('Location access denied.', false);
       }
     });
+    renderLocationChips();
   }
 
   el.searchInput.addEventListener('keyup', (e) => {
@@ -2213,10 +2403,12 @@
               el.searchInput.value = locName;
               el.btnSearchClear.classList.remove('hidden');
               hideSearchResults();
-              el.loading.textContent = '\u25CC';
-              el.loading.classList.remove('hidden');
-              el.weatherContent.classList.add('hidden');
+              isFirstRender = true;
               debouncedFetch(savedLat, savedLon, locName);
+              // Save location and update chips
+              addSavedLocation(locName, r.latitude, r.longitude);
+              currentSavedLocation = { name: locName, lat: r.latitude, lon: r.longitude };
+              renderLocationChips();
             });
           });
         }
@@ -2233,7 +2425,7 @@
 
   // Close search results on outside click
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#search-bar')) {
+    if (!e.target.closest('#location-bar')) {
       hideSearchResults();
     }
   });
