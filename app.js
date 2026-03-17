@@ -99,6 +99,7 @@
   let deferredInstallPrompt = null;
   let fetchId = 0;
   let isFirstRender = true;
+  let isVeryFirstRender = true;
   let tabTransitioning = false;
   let currentSavedLocation = null;
   let confettiFired = false; // { name, lat, lon } or null for GPS
@@ -922,7 +923,6 @@
   function renderFeelsTrend(current, hourlySlots) {
     const trend = feelsTrend(current, hourlySlots);
     el.feelsTrend.textContent = `${trend.arrow} ${trend.label}`;
-    el.feelsTrend.style.color = trend.color;
   }
 
   function generateShareText(weather, location, alerts) {
@@ -1022,6 +1022,46 @@
       el.weatherBgNext.style.opacity = '0';
       bgTransitionTimer = null;
     }, 850);
+
+    // Adaptive hero card opacity based on gradient brightness
+    const heroCard = $('hero-card');
+    const tempEl = $('current-temp');
+    if (heroCard) {
+      const avg = (hexBrightness(c1) + hexBrightness(c2)) / 2;
+      if (avg > 140) {
+        heroCard.style.background = 'rgba(255,255,255,0.45)';
+        heroCard.style.borderColor = 'rgba(255,255,255,0.55)';
+        if (tempEl) tempEl.style.textShadow = '0 2px 16px rgba(0,0,0,0.2)';
+      } else if (avg > 80) {
+        heroCard.style.background = 'rgba(255,255,255,0.25)';
+        heroCard.style.borderColor = 'rgba(255,255,255,0.3)';
+        if (tempEl) tempEl.style.textShadow = '0 2px 12px rgba(0,0,0,0.15)';
+      } else {
+        heroCard.style.background = 'rgba(0,0,0,0.2)';
+        heroCard.style.borderColor = 'rgba(255,255,255,0.08)';
+        if (tempEl) tempEl.style.textShadow = '0 2px 12px rgba(0,0,0,0.3)';
+      }
+    }
+
+    // Ambient glow color
+    const glowEl = $('ambient-glow');
+    if (glowEl) {
+      let ambientColor = 'rgba(255,255,255,0.03)';
+      if ((code === 0 || code === 1) && isDaytime) ambientColor = 'rgba(255,255,255,0.06)';
+      else if (!isDaytime) ambientColor = 'rgba(100,120,200,0.04)';
+      else if (code >= 95 && code <= 99) ambientColor = 'rgba(139,92,246,0.05)';
+      else if (apparentTemp != null && apparentTemp > 90) ambientColor = 'rgba(251,191,36,0.05)';
+      glowEl.style.setProperty('--ambient-color', ambientColor);
+    }
+  }
+
+  function hexBrightness(hex) {
+    try {
+      const r = parseInt(hex.slice(1,3), 16);
+      const g = parseInt(hex.slice(3,5), 16);
+      const b = parseInt(hex.slice(5,7), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000;
+    } catch { return 128; }
   }
 
   // --- Loading Skeleton ---
@@ -1159,16 +1199,70 @@
 
   // --- Animations ---
 
+  function cinematicEntrance() {
+    const heroCard = $('hero-card');
+    const surface = $('content-surface');
+    const locLabel = $('location-label');
+    const condition = $('current-condition');
+    const briefing = $('weather-briefing');
+
+    [heroCard, surface].forEach(e => {
+      if (!e) return;
+      e.style.opacity = '0';
+      e.style.transform = 'translateY(20px)';
+    });
+    [locLabel, condition, briefing].forEach(e => { if (e) e.style.opacity = '0'; });
+
+    requestAnimationFrame(() => {
+      if (heroCard) {
+        heroCard.style.transition = 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.16,1,0.3,1)';
+        heroCard.style.opacity = '1';
+        heroCard.style.transform = 'translateY(0)';
+      }
+    });
+
+    setTimeout(() => {
+      if (locLabel) { locLabel.style.transition = 'opacity 0.4s ease'; locLabel.style.opacity = '1'; }
+    }, 300);
+
+    setTimeout(() => {
+      [condition, briefing].forEach(e => {
+        if (!e) return;
+        e.style.transition = 'opacity 0.4s ease';
+        e.style.opacity = '1';
+      });
+    }, 500);
+
+    setTimeout(() => {
+      if (surface) {
+        surface.style.transition = 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.16,1,0.3,1)';
+        surface.style.opacity = '1';
+        surface.style.transform = 'translateY(0)';
+      }
+    }, 700);
+
+    setTimeout(() => animateEntrance(), 1000);
+
+    setTimeout(() => {
+      [heroCard, surface, locLabel, condition, briefing].forEach(e => {
+        if (!e) return;
+        e.style.transition = '';
+        e.style.transform = '';
+        e.style.opacity = '';
+      });
+    }, 2000);
+  }
+
   function animateEntrance() {
     // Remove any existing animations first
     document.querySelectorAll('.animate-in').forEach(e => e.classList.remove('animate-in'));
 
     const targets = [
-      { sel: '#current', delay: 0 },
-      { sel: '#stats-inline', delay: 60 },
-      { sel: '#alert-banner-nws', delay: 120 },
-      { sel: '#tabs', delay: 180 },
-      { sel: '.tab-panel.active', delay: 220 },
+      { sel: '#hero-card', delay: 0 },
+      { sel: '#content-surface', delay: 100 },
+      { sel: '#stats-inline', delay: 160 },
+      { sel: '#alert-banner-nws', delay: 220 },
+      { sel: '#tabs', delay: 280 },
     ];
 
     targets.forEach(({ sel, delay, stagger }) => {
@@ -1236,7 +1330,7 @@
     renderCurrent(current, location);
 
     // Animate temperature counter on first render
-    if (isFirstRender) {
+    if (isFirstRender || isVeryFirstRender) {
       animateTemperature(current.temperature_2m);
     }
 
@@ -1281,8 +1375,12 @@
     // Background update all chip temps
     updateChipTemps();
 
-    // Entrance animation on first render after fetch
-    if (isFirstRender) {
+    // Entrance animation
+    if (isVeryFirstRender) {
+      cinematicEntrance();
+      isVeryFirstRender = false;
+      isFirstRender = false;
+    } else if (isFirstRender) {
       animateEntrance();
       isFirstRender = false;
     }
@@ -1726,23 +1824,30 @@
     }
     const light = isLightTheme();
     const code = weatherCode;
-    if (code === 0 || code === 1) {
-      if (!isDaytime) return { top: '#0c1445', bottom: '#1a237e' };
-      return light ? { top: '#4facfe', bottom: '#00f2fe' } : { top: '#0a1e3d', bottom: '#0d2847' };
-    } else if (code === 2 || code === 3) {
-      return light
-        ? (code === 2 ? { top: '#89b4fa', bottom: '#a5c8ff' } : { top: '#8e9eab', bottom: '#eef2f3' })
-        : { top: code === 2 ? '#0d1f35' : '#111827', bottom: code === 2 ? '#111827' : '#0f172a' };
-    } else if (code === 45 || code === 48) {
-      return light ? { top: '#b5bdc8', bottom: '#dfe4ea' } : { top: '#111820', bottom: '#0d1520' };
-    } else if (code >= 71 && code <= 77) {
-      return light ? { top: '#c9d6e3', bottom: '#f5f7fa' } : { top: '#101828', bottom: '#1a2436' };
-    } else if (code >= 95 && code <= 99) {
-      return light ? { top: '#373b44', bottom: '#4f5b62' } : { top: '#120a24', bottom: '#1a0830' };
-    } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      return light ? { top: '#616d86', bottom: '#96a2b8' } : { top: '#0d1a2d', bottom: '#0a1525' };
+    // Returns 4-stop gradient matching applyWeatherBackground palettes
+    if (!isDaytime) {
+      if (code >= 95) return { c1:'#08060e',c2:'#100c20',c3:'#1a1230',c4:'#221840' };
+      if (code >= 51 && code <= 82) return { c1:'#080e1a',c2:'#0e1a2c',c3:'#14263c',c4:'#1c324c' };
+      return { c1:'#070b1e',c2:'#0f1640',c3:'#1a2060',c4:'#252d75' };
     }
-    return light ? { top: '#cbd5e1', bottom: '#e2e8f0' } : { top: '#0a1525', bottom: '#060f1a' };
+    if (code === 0 || code === 1) {
+      return light ? { c1:'#1a8cff',c2:'#4da6ff',c3:'#87c4f5',c4:'#bfdcf5' }
+        : { c1:'#06101f',c2:'#0c1e38',c3:'#122c4e',c4:'#183a5c' };
+    }
+    if (code === 3) {
+      return light ? { c1:'#6a7a8a',c2:'#8494a2',c3:'#a0adb8',c4:'#bcc5cc' }
+        : { c1:'#0c1018',c2:'#141a24',c3:'#1e242e',c4:'#282f38' };
+    }
+    if (code >= 95) {
+      return light ? { c1:'#1e2430',c2:'#2a3242',c3:'#3a4454',c4:'#4e5868' }
+        : { c1:'#08060e',c2:'#100c20',c3:'#1a1230',c4:'#221840' };
+    }
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+      return light ? { c1:'#2e3e4e',c2:'#40525f',c3:'#586a76',c4:'#728490' }
+        : { c1:'#080e1a',c2:'#0e1a2c',c3:'#14263c',c4:'#1c324c' };
+    }
+    return light ? { c1:'#5494cc',c2:'#7aadda',c3:'#a3c5e5',c4:'#ccdceb' }
+      : { c1:'#0a1420',c2:'#0f1e30',c3:'#162940',c4:'#1e344e' };
   }
 
   function hexToRgb(hex) {
@@ -1772,8 +1877,10 @@
         // --- Background gradient ---
         const grad = getWeatherGradient(current.weather_code, dailySlots);
         const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-        bgGrad.addColorStop(0, grad.top);
-        bgGrad.addColorStop(1, grad.bottom);
+        bgGrad.addColorStop(0, grad.c1);
+        bgGrad.addColorStop(0.35, grad.c2);
+        bgGrad.addColorStop(0.7, grad.c3);
+        bgGrad.addColorStop(1, grad.c4);
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
 
