@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wxnow-v8';
+const CACHE_NAME = 'wxnow-v9';
 const API_CACHE = 'wxnow-api-cache';
 const STATIC_ASSETS = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json'];
 

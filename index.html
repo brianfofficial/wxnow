@@ -27,8 +27,9 @@
     try {
       var t = localStorage.getItem('wxnow-theme');
       if (t) document.documentElement.dataset.theme = t;
-      else if (window.matchMedia('(prefers-color-scheme: light)').matches)
-        document.documentElement.dataset.theme = 'light';
+      else if (window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = 'dark';
+      else document.documentElement.dataset.theme = 'light';
     } catch(e) {}
   </script>
 </head>
@@ -72,7 +73,6 @@
       <div id="hero-left">
         <div id="current-temp">--°</div>
         <div id="current-condition">--</div>
-        <div id="weather-mascot"></div>
         <div id="weather-briefing" class="weather-briefing"></div>
         <div id="current-feels">--</div>
         <span id="feels-trend"></span>

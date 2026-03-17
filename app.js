@@ -287,87 +287,6 @@
     return document.documentElement.dataset.theme === 'light';
   }
 
-  // --- Weather Mascot SVG ---
-  function getWeatherMascot(weatherCode, apparentTemp, isDaytime) {
-    const code = weatherCode || 0;
-    const temp = isNaN(apparentTemp) ? 70 : apparentTemp;
-    // Base cloud path
-    const cloud = '<ellipse cx="24" cy="30" rx="18" ry="10" fill="FILL"/><circle cx="16" cy="23" r="7" fill="FILL"/><circle cx="28" cy="21" r="9" fill="FILL"/>';
-
-    function svg(fill, face, extras) {
-      const c = cloud.replace(/FILL/g, fill);
-      return `<svg viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Weather mascot">${extras || ''}${c}${face}</svg>`;
-    }
-    // Eyes: two dots
-    const eyes = '<circle cx="19" cy="28" r="1.5" fill="#1e293b"/><circle cx="29" cy="28" r="1.5" fill="#1e293b"/>';
-    const smile = '<path d="M21 33 Q24 36 27 33" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
-    const frown = '<path d="M21 34 Q24 31 27 34" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
-    const flat = '<line x1="21" y1="33" x2="27" y2="33" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/>';
-    const bigSmile = '<path d="M20 32 Q24 37 28 32" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
-    const sleepyEyes = '<path d="M17 27 Q19 29 21 27" stroke="#1e293b" stroke-width="1.5" fill="none"/><path d="M27 27 Q29 29 31 27" stroke="#1e293b" stroke-width="1.5" fill="none"/>';
-    const closedEyes = '<line x1="17" y1="28" x2="21" y2="28" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/><line x1="27" y1="28" x2="31" y2="28" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>';
-    const sunglasses = '<rect x="16" y="26" width="6" height="4" rx="1.5" fill="#1e293b"/><rect x="26" y="26" width="6" height="4" rx="1.5" fill="#1e293b"/><line x1="22" y1="28" x2="26" y2="28" stroke="#1e293b" stroke-width="1"/>';
-
-    // Thunderstorm
-    if (code >= 95 && code <= 99) {
-      const bolt = '<polygon points="32,8 28,18 32,18 27,28" fill="#fbbf24"/>';
-      const zigMouth = '<path d="M20 33 L22 31 L24 33 L26 31 L28 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
-      return svg('#94a3b8', closedEyes + zigMouth, bolt);
-    }
-    // Heavy rain
-    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
-      const tears = '<circle cx="18" cy="42" r="1.5" fill="#7dd3fc"/><circle cx="24" cy="44" r="1.5" fill="#7dd3fc"/><circle cx="30" cy="42" r="1.5" fill="#7dd3fc"/>';
-      return svg('#7dd3fc', eyes + frown, tears);
-    }
-    // Drizzle
-    if (code >= 51 && code <= 57) {
-      const tear = '<circle cx="24" cy="43" r="1.5" fill="#bae6fd"/>';
-      const slightFrown = '<path d="M22 33 Q24 32 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
-      return svg('#bae6fd', eyes + slightFrown, tear);
-    }
-    // Snow
-    if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
-      const happyEyes = '<path d="M17 29 Q19 27 21 29" stroke="#1e293b" stroke-width="1.5" fill="none"/><path d="M27 29 Q29 27 31 29" stroke="#1e293b" stroke-width="1.5" fill="none"/>';
-      const flake = '<text x="36" y="14" font-size="10" fill="#bae6fd">❄</text>';
-      return svg('#e2e8f0', happyEyes + bigSmile, flake);
-    }
-    // Fog
-    if (code === 45 || code === 48) {
-      const waves = '<line x1="8" y1="38" x2="16" y2="38" stroke="#cbd5e1" stroke-width="1.5" opacity="0.5"/><line x1="32" y1="38" x2="40" y2="38" stroke="#cbd5e1" stroke-width="1.5" opacity="0.5"/>';
-      return svg('#cbd5e1', sleepyEyes + flat, waves);
-    }
-    // Hot
-    if (temp > 90) {
-      const smirk = '<path d="M22 33 Q25 35 28 32" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
-      return svg('#fbbf24', sunglasses + smirk);
-    }
-    // Cold
-    if (temp < 32) {
-      const wavy = '<path d="M20 33 Q21.5 31.5 23 33 Q24.5 34.5 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
-      const scarf = '<path d="M14 35 Q24 38 34 35" stroke="#ef4444" stroke-width="2" fill="none" opacity="0.6"/>';
-      return svg('#93c5fd', eyes + wavy, scarf);
-    }
-    // Clear day
-    if ((code === 0 || code === 1) && isDaytime) {
-      const rays = '<line x1="24" y1="6" x2="24" y2="10" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>'
-        + '<line x1="36" y1="14" x2="33" y2="16" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>'
-        + '<line x1="12" y1="14" x2="15" y2="16" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>';
-      return svg('#fcd34d', eyes + bigSmile, rays);
-    }
-    // Clear night
-    if ((code === 0 || code === 1) && !isDaytime) {
-      const gentleSmile = '<path d="M22 33 Q24 35 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
-      const moon = '<text x="36" y="14" font-size="8" fill="#a5b4fc">🌙</text>';
-      return svg('#a5b4fc', sleepyEyes + gentleSmile, moon);
-    }
-    // Partly cloudy
-    if (code === 2) return svg('#e2e8f0', eyes + smile);
-    // Overcast
-    if (code === 3) return svg('#94a3b8', eyes + flat);
-    // Default
-    return svg('#cbd5e1', eyes + smile);
-  }
-
   function displayTemp(f) {
     return useFahrenheit ? Math.round(f) + '°' : Math.round((f - 32) * 5 / 9) + '°';
   }
@@ -489,10 +408,10 @@
   function renderStatsBar(current) {
     clearEl(el.statsBar);
     const items = [
-      { label: 'HUMIDITY', value: `${current.relative_humidity_2m}%` },
-      { label: 'WIND', value: `${displayWind(current.wind_speed_10m)} ${degToCompass(current.wind_direction_10m)}` },
-      { label: 'DEW', value: displayTemp(current.dew_point_2m) },
-      { label: 'PRECIP', value: current.precipitation === 0 ? 'NONE' : `${current.precipitation}"` },
+      { label: 'Humidity', value: `${current.relative_humidity_2m}%` },
+      { label: 'Wind', value: `${displayWind(current.wind_speed_10m)} ${degToCompass(current.wind_direction_10m)}` },
+      { label: 'Dew', value: displayTemp(current.dew_point_2m) },
+      { label: 'Precip', value: current.precipitation === 0 ? '—' : `${current.precipitation}"` },
     ];
     items.forEach((item, idx) => {
       if (idx > 0) {
@@ -517,7 +436,7 @@
   function renderSparkline(hourlySlots) {
     clearEl(el.heroSparkline);
     if (!hourlySlots || hourlySlots.length === 0) return;
-    const slots = hourlySlots.slice(0, 6);
+    const slots = hourlySlots.slice(0, 5);
     slots.forEach((slot, i) => {
       const col = document.createElement('div');
       col.className = 'spark-col';
@@ -605,7 +524,7 @@
     if (allClear) {
       const empty = document.createElement('div');
       empty.className = 'now-empty';
-      empty.innerHTML = '<div class="now-empty-mascot">' + getWeatherMascot(0, 70, true) + '</div>All clear for the next 2 hours. 👍';
+      empty.innerHTML = '<div class="now-empty-icon">👍</div>All clear for the next 2 hours.';
       el.nowAlways.appendChild(empty);
       return;
     }
@@ -1400,15 +1319,6 @@
       animateTemperature(current.temperature_2m);
     }
 
-    // Weather mascot
-    let isDaytimeNow = true;
-    if (dailySlots && dailySlots.length > 0) {
-      const now = Date.now();
-      isDaytimeNow = now > new Date(dailySlots[0].sunrise).getTime() && now < new Date(dailySlots[0].sunset).getTime();
-    }
-    const mascotEl = $('weather-mascot');
-    if (mascotEl) mascotEl.innerHTML = getWeatherMascot(current.weather_code, current.apparent_temperature, isDaytimeNow);
-
     // Weather briefing
     const briefingEl = $('weather-briefing');
     if (briefingEl) briefingEl.textContent = getWeatherBriefing(weather, dailySlots, hourlySlots);
@@ -1673,12 +1583,12 @@
       {
         heading: 'Hey there! 👋',
         subtext: 'WXNOW shows you minute-by-minute weather — no ads, no account, no nonsense.',
-        visual: getWeatherMascot(0, 75, true),
+        visual: '<div style="font-size:48px">⛅</div>',
       },
       {
         heading: 'Know before it rains 🌧',
         subtext: '15-minute precipitation windows, best time to go outside, and severe weather alerts from NOAA — all in one glance.',
-        visual: getWeatherMascot(63, 70, true),
+        visual: '<div style="font-size:48px">🌧</div>',
       },
       {
         heading: 'One more thing 📍',
