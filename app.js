@@ -103,7 +103,8 @@
   let fetchId = 0;
   let isFirstRender = true;
   let tabTransitioning = false;
-  let currentSavedLocation = null; // { name, lat, lon } or null for GPS
+  let currentSavedLocation = null;
+  let confettiFired = false; // { name, lat, lon } or null for GPS
 
   try { if (localStorage.getItem('wxnow-unit') === 'c') useFahrenheit = false; } catch {}
 
@@ -268,22 +269,103 @@
     const results = await Promise.all(saved.map(async (loc) => {
       try {
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m&temperature_unit=fahrenheit&timezone=auto`
+          `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`
         );
         const data = await res.json();
-        return { lat: loc.lat, lon: loc.lon, temp: data.current.temperature_2m };
+        return { lat: loc.lat, lon: loc.lon, temp: data.current.temperature_2m, code: data.current.weather_code };
       } catch { return null; }
     }));
     results.forEach(r => {
       if (!r) return;
       const chip = document.querySelector(`.loc-chip[data-lat="${r.lat}"][data-lon="${r.lon}"] .loc-chip-temp`);
-      if (chip) chip.textContent = displayTemp(r.temp);
+      if (chip) chip.textContent = `${wmo(r.code).icon} ${displayTemp(r.temp)}`;
     });
   }
 
   // Theme init (blocking script in <head> handles the data attribute; this syncs button text)
   function isLightTheme() {
     return document.documentElement.dataset.theme === 'light';
+  }
+
+  // --- Weather Mascot SVG ---
+  function getWeatherMascot(weatherCode, apparentTemp, isDaytime) {
+    const code = weatherCode || 0;
+    const temp = isNaN(apparentTemp) ? 70 : apparentTemp;
+    // Base cloud path
+    const cloud = '<ellipse cx="24" cy="30" rx="18" ry="10" fill="FILL"/><circle cx="16" cy="23" r="7" fill="FILL"/><circle cx="28" cy="21" r="9" fill="FILL"/>';
+
+    function svg(fill, face, extras) {
+      const c = cloud.replace(/FILL/g, fill);
+      return `<svg viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Weather mascot">${extras || ''}${c}${face}</svg>`;
+    }
+    // Eyes: two dots
+    const eyes = '<circle cx="19" cy="28" r="1.5" fill="#1e293b"/><circle cx="29" cy="28" r="1.5" fill="#1e293b"/>';
+    const smile = '<path d="M21 33 Q24 36 27 33" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+    const frown = '<path d="M21 34 Q24 31 27 34" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+    const flat = '<line x1="21" y1="33" x2="27" y2="33" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/>';
+    const bigSmile = '<path d="M20 32 Q24 37 28 32" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+    const sleepyEyes = '<path d="M17 27 Q19 29 21 27" stroke="#1e293b" stroke-width="1.5" fill="none"/><path d="M27 27 Q29 29 31 27" stroke="#1e293b" stroke-width="1.5" fill="none"/>';
+    const closedEyes = '<line x1="17" y1="28" x2="21" y2="28" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/><line x1="27" y1="28" x2="31" y2="28" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>';
+    const sunglasses = '<rect x="16" y="26" width="6" height="4" rx="1.5" fill="#1e293b"/><rect x="26" y="26" width="6" height="4" rx="1.5" fill="#1e293b"/><line x1="22" y1="28" x2="26" y2="28" stroke="#1e293b" stroke-width="1"/>';
+
+    // Thunderstorm
+    if (code >= 95 && code <= 99) {
+      const bolt = '<polygon points="32,8 28,18 32,18 27,28" fill="#fbbf24"/>';
+      const zigMouth = '<path d="M20 33 L22 31 L24 33 L26 31 L28 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
+      return svg('#94a3b8', closedEyes + zigMouth, bolt);
+    }
+    // Heavy rain
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+      const tears = '<circle cx="18" cy="42" r="1.5" fill="#7dd3fc"/><circle cx="24" cy="44" r="1.5" fill="#7dd3fc"/><circle cx="30" cy="42" r="1.5" fill="#7dd3fc"/>';
+      return svg('#7dd3fc', eyes + frown, tears);
+    }
+    // Drizzle
+    if (code >= 51 && code <= 57) {
+      const tear = '<circle cx="24" cy="43" r="1.5" fill="#bae6fd"/>';
+      const slightFrown = '<path d="M22 33 Q24 32 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
+      return svg('#bae6fd', eyes + slightFrown, tear);
+    }
+    // Snow
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
+      const happyEyes = '<path d="M17 29 Q19 27 21 29" stroke="#1e293b" stroke-width="1.5" fill="none"/><path d="M27 29 Q29 27 31 29" stroke="#1e293b" stroke-width="1.5" fill="none"/>';
+      const flake = '<text x="36" y="14" font-size="10" fill="#bae6fd">❄</text>';
+      return svg('#e2e8f0', happyEyes + bigSmile, flake);
+    }
+    // Fog
+    if (code === 45 || code === 48) {
+      const waves = '<line x1="8" y1="38" x2="16" y2="38" stroke="#cbd5e1" stroke-width="1.5" opacity="0.5"/><line x1="32" y1="38" x2="40" y2="38" stroke="#cbd5e1" stroke-width="1.5" opacity="0.5"/>';
+      return svg('#cbd5e1', sleepyEyes + flat, waves);
+    }
+    // Hot
+    if (temp > 90) {
+      const smirk = '<path d="M22 33 Q25 35 28 32" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+      return svg('#fbbf24', sunglasses + smirk);
+    }
+    // Cold
+    if (temp < 32) {
+      const wavy = '<path d="M20 33 Q21.5 31.5 23 33 Q24.5 34.5 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
+      const scarf = '<path d="M14 35 Q24 38 34 35" stroke="#ef4444" stroke-width="2" fill="none" opacity="0.6"/>';
+      return svg('#93c5fd', eyes + wavy, scarf);
+    }
+    // Clear day
+    if ((code === 0 || code === 1) && isDaytime) {
+      const rays = '<line x1="24" y1="6" x2="24" y2="10" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>'
+        + '<line x1="36" y1="14" x2="33" y2="16" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>'
+        + '<line x1="12" y1="14" x2="15" y2="16" stroke="#fcd34d" stroke-width="1.5" opacity="0.6"/>';
+      return svg('#fcd34d', eyes + bigSmile, rays);
+    }
+    // Clear night
+    if ((code === 0 || code === 1) && !isDaytime) {
+      const gentleSmile = '<path d="M22 33 Q24 35 26 33" stroke="#1e293b" stroke-width="1.2" fill="none"/>';
+      const moon = '<text x="36" y="14" font-size="8" fill="#a5b4fc">🌙</text>';
+      return svg('#a5b4fc', sleepyEyes + gentleSmile, moon);
+    }
+    // Partly cloudy
+    if (code === 2) return svg('#e2e8f0', eyes + smile);
+    // Overcast
+    if (code === 3) return svg('#94a3b8', eyes + flat);
+    // Default
+    return svg('#cbd5e1', eyes + smile);
   }
 
   function displayTemp(f) {
@@ -509,7 +591,7 @@
     clearEl(el.nowAlways);
     const label = document.createElement('div');
     label.className = 'section-label';
-    label.textContent = 'NEXT 2 HRS';
+    label.textContent = 'Next 2 Hours';
     el.nowAlways.appendChild(label);
 
     if (!minutelySlots || minutelySlots.length === 0) {
@@ -517,6 +599,14 @@
       msg.className = 'tab-unavailable';
       msg.textContent = '15-min data unavailable for this location';
       el.nowAlways.appendChild(msg);
+      return;
+    }
+    const allClear = minutelySlots.every(s => s.precip === 0);
+    if (allClear) {
+      const empty = document.createElement('div');
+      empty.className = 'now-empty';
+      empty.innerHTML = '<div class="now-empty-mascot">' + getWeatherMascot(0, 70, true) + '</div>All clear for the next 2 hours. 👍';
+      el.nowAlways.appendChild(empty);
       return;
     }
     const capped = minutelySlots.slice(0, 8);
@@ -728,13 +818,33 @@
     const banner = document.createElement('div');
     banner.id = 'best-window-banner';
     if (bw) {
-      banner.textContent = `BEST TIME OUTSIDE TODAY · ${bw.startTime}–${bw.endTime}`;
+      banner.textContent = `Best time outside today · ${bw.startTime}–${bw.endTime}`;
       banner.className = 'best-window-good';
+      banner.style.position = 'relative';
     } else {
-      banner.textContent = 'OUTDOOR CONDITIONS POOR TODAY';
+      banner.textContent = 'Outdoor conditions poor today';
       banner.className = 'best-window-poor';
     }
     el.tab7day.appendChild(banner);
+
+    // Confetti burst for good window
+    if (bw && !confettiFired) {
+      confettiFired = true;
+      const colors = ['#4ade80', '#38bdf8', '#fbbf24', '#a78bfa', '#f472b6'];
+      setTimeout(() => {
+        for (let i = 0; i < 5; i++) {
+          const dot = document.createElement('div');
+          dot.className = 'confetti-dot';
+          dot.style.background = colors[i % colors.length];
+          dot.style.left = `${40 + Math.random() * 20}%`;
+          dot.style.top = '50%';
+          dot.style.setProperty('--tx', `${-30 + Math.random() * 60}px`);
+          dot.style.setProperty('--ty', `${-20 - Math.random() * 30}px`);
+          banner.appendChild(dot);
+          setTimeout(() => dot.remove(), 850);
+        }
+      }, 200);
+    }
 
     days.forEach((day, idx) => {
       const row = document.createElement('div');
@@ -1157,59 +1267,51 @@
     const code = c.weather_code;
     const temp = c.apparent_temperature;
 
-    // Alerts first
     const extreme = (activeAlerts || []).find(a => a.severity === 'Extreme');
-    if (extreme) return 'Severe weather active. Stay safe.';
+    if (extreme) return 'Hey, stay safe out there. ⚠️';
     const severe = (activeAlerts || []).find(a => a.severity === 'Severe');
-    if (severe) return 'Weather alert in your area.';
+    if (severe) return 'Heads up — there\'s a weather alert nearby.';
 
-    // Active precipitation
     if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
       const precip = c.precipitation != null ? c.precipitation : 0;
-      return `It's raining. ${precip}" in the last hour.`;
+      return `Yep, it's raining. ☔ ${precip}" so far.`;
     }
-    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'Snow falling. Bundle up.';
-    if (code >= 95 && code <= 99) return 'Thunderstorms. Stay indoors if you can.';
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'Snow day! ❄️ Bundle up.';
+    if (code >= 95 && code <= 99) return 'Thunder and lightning — maybe stay in? ⛈';
 
-    // Upcoming rain
     if (hourlySlots && hourlySlots.length > 0) {
       const nextProb = hourlySlots[0].prob;
-      if (nextProb > 80) return 'Rain likely within the hour.';
-      if (nextProb > 50) return 'Rain possible soon. Heads up.';
+      if (nextProb > 80) return 'Rain\'s coming soon. Grab an umbrella. 🌂';
+      if (nextProb > 50) return 'Might rain soon — just a heads up.';
     }
 
-    // Temperature extremes
-    if (temp > 100) return 'Dangerously hot. Hydrate.';
-    if (temp > 90) return "It's a scorcher. Stay cool.";
-    if (temp < 20) return 'Bitterly cold. Layer up.';
-    if (temp < 32) return 'Below freezing. Watch for ice.';
+    if (temp > 100) return 'It\'s dangerously hot. Please hydrate. 🥵';
+    if (temp > 90) return 'It\'s a hot one. Stay cool. 😎';
+    if (temp < 20) return 'Brutally cold. Layer up. 🥶';
+    if (temp < 32) return 'Below freezing — watch for ice.';
 
-    // Wind
-    if (c.wind_speed_10m > 30) return 'Very windy. Hold onto your hat.';
+    if (c.wind_speed_10m > 30) return 'Super windy out there. Hold your hat! 💨';
 
-    // UV
     const uv = dailySlots && dailySlots[0] ? dailySlots[0].uvMax : 0;
-    if (uv > 8) return 'UV is extreme. Sunscreen is mandatory.';
-    if (uv > 5) return 'UV is high. Wear sunscreen.';
+    if (uv > 8) return 'UV is extreme today. Sunscreen is a must. 🧴';
+    if (uv > 5) return 'UV is high — don\'t skip sunscreen.';
 
-    // Daytime check
     let isDaytime = true;
     if (dailySlots && dailySlots.length > 0) {
       const now = Date.now();
       isDaytime = now > new Date(dailySlots[0].sunrise).getTime() && now < new Date(dailySlots[0].sunset).getTime();
     }
 
-    // Clear/pleasant conditions
     if (code <= 1) {
-      if (isDaytime && temp >= 65 && temp <= 80) return 'Perfect weather. Get outside.';
-      if (isDaytime) return 'Clear skies.';
-      return 'Clear night.';
+      if (isDaytime && temp >= 65 && temp <= 80) return 'Perfect weather. Go enjoy it! ☀️';
+      if (isDaytime) return 'Clear skies. Nice.';
+      return 'Clear night. Sleep well. 🌙';
     }
-    if (code === 2) return 'Partly cloudy.';
-    if (code === 3) return 'Overcast.';
-    if (code === 45 || code === 48) return 'Foggy. Low visibility.';
+    if (code === 2) return 'A few clouds, nothing dramatic.';
+    if (code === 3) return 'Cloudy, but that\'s okay.';
+    if (code === 45 || code === 48) return 'Foggy out. Drive carefully. 🌫';
 
-    return 'Weather data loaded.';
+    return 'Weather loaded. You\'re all set.';
   }
 
   // --- Animations ---
@@ -1298,6 +1400,15 @@
       animateTemperature(current.temperature_2m);
     }
 
+    // Weather mascot
+    let isDaytimeNow = true;
+    if (dailySlots && dailySlots.length > 0) {
+      const now = Date.now();
+      isDaytimeNow = now > new Date(dailySlots[0].sunrise).getTime() && now < new Date(dailySlots[0].sunset).getTime();
+    }
+    const mascotEl = $('weather-mascot');
+    if (mascotEl) mascotEl.innerHTML = getWeatherMascot(current.weather_code, current.apparent_temperature, isDaytimeNow);
+
     // Weather briefing
     const briefingEl = $('weather-briefing');
     if (briefingEl) briefingEl.textContent = getWeatherBriefing(weather, dailySlots, hourlySlots);
@@ -1333,12 +1444,12 @@
     // Update GPS chip temp
     const gpsChipTemp = document.querySelector('.loc-chip-gps .loc-chip-temp');
     if (gpsChipTemp && !currentSavedLocation) {
-      gpsChipTemp.textContent = displayTemp(current.temperature_2m);
+      gpsChipTemp.textContent = `${wmo(current.weather_code).icon} ${displayTemp(current.temperature_2m)}`;
     }
     // Update active saved chip temp
     if (currentSavedLocation) {
       const activeChipTemp = document.querySelector('.loc-chip.active .loc-chip-temp');
-      if (activeChipTemp) activeChipTemp.textContent = displayTemp(current.temperature_2m);
+      if (activeChipTemp) activeChipTemp.textContent = `${wmo(current.weather_code).icon} ${displayTemp(current.temperature_2m)}`;
     }
     // Background update all chip temps
     updateChipTemps();
@@ -1466,6 +1577,7 @@
 
   const debouncedFetch = debounce(async (lat, lon, overrideLocation) => {
     isFirstRender = true;
+    confettiFired = false;
     const myFetchId = ++fetchId;
     try {
       lastFetchTime = Date.now();
@@ -1526,7 +1638,7 @@
     } catch (err) {
       if (!showedCache) {
         if (err.code === 1) {
-          showError('Location access denied. Please enable location services in your device settings.', false);
+          showError('WXNOW needs your location to show weather. You can also search for a city above. 📍', false);
         } else if (err.code === 3) {
           showError('Location request timed out. Tap to retry.', true);
         } else {
@@ -1559,25 +1671,18 @@
 
     const screens = [
       {
-        heading: 'Weather, not noise.',
-        subtext: 'Minute-by-minute forecasts. No ads. No account. No drama.',
-        visual: '<div class="onboard-pulse"></div>',
+        heading: 'Hey there! 👋',
+        subtext: 'WXNOW shows you minute-by-minute weather — no ads, no account, no nonsense.',
+        visual: getWeatherMascot(0, 75, true),
       },
       {
-        heading: 'Know before it rains.',
-        subtext: '15-minute precipitation windows. Best time to go outside. Severe weather alerts from NOAA.',
-        visual: '<div class="onboard-precip-mock">'
-          + '<div class="onboard-precip-bar" style="height:20px;background:#22c55e"></div>'
-          + '<div class="onboard-precip-bar" style="height:35px;background:#4ade80"></div>'
-          + '<div class="onboard-precip-bar" style="height:50px;background:#facc15"></div>'
-          + '<div class="onboard-precip-bar" style="height:40px;background:#f59e0b"></div>'
-          + '<div class="onboard-precip-bar" style="height:25px;background:#f97316"></div>'
-          + '<div class="onboard-precip-bar" style="height:15px;background:#ef4444"></div>'
-          + '</div>',
+        heading: 'Know before it rains 🌧',
+        subtext: '15-minute precipitation windows, best time to go outside, and severe weather alerts from NOAA — all in one glance.',
+        visual: getWeatherMascot(63, 70, true),
       },
       {
-        heading: 'One tap. Your weather.',
-        subtext: 'WXNOW needs your location to show local weather. Nothing is stored. Nothing is tracked.',
+        heading: 'One more thing 📍',
+        subtext: 'WXNOW needs your location for local weather. Nothing is stored or tracked. Promise.',
         visual: '<div class="onboard-pin">📍</div>',
       },
     ];
@@ -1639,7 +1744,7 @@
 
     const enableBtn = document.createElement('button');
     enableBtn.className = 'onboard-btn';
-    enableBtn.textContent = 'Enable Location →';
+    enableBtn.textContent = 'Let\'s go →';
 
     const searchLink = document.createElement('button');
     searchLink.className = 'onboard-btn-secondary';

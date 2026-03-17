@@ -163,6 +163,20 @@ body {
 #current-feels { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: inline; }
 #feels-trend { font-size: 10px; margin-left: 6px; font-weight: 500; }
 
+/* Weather mascot */
+#weather-mascot { margin: 4px 0 2px; height: 48px; }
+@keyframes mascotBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+#weather-mascot svg {
+  animation: mascotBob 3s ease-in-out infinite;
+}
+@media (max-width: 320px) {
+  #weather-mascot { height: 36px; }
+  #weather-mascot svg { width: 36px; height: 36px; }
+}
+
 /* Sparkline */
 #hero-sparkline { display: flex; align-items: flex-end; gap: 4px; height: 50px; flex-shrink: 0; padding-right: 4px; }
 .spark-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
@@ -183,7 +197,12 @@ body {
 }
 
 /* Stats bar */
-#stats-bar { display: flex; align-items: center; padding: 8px 0; flex-wrap: wrap; }
+#stats-bar {
+  display: flex; align-items: center; padding: 12px 16px; flex-wrap: wrap;
+  background: var(--surface); border-radius: 12px; margin: 16px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+:root[data-theme="light"] #stats-bar { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .stats-pill { display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px; font-size: 11px; white-space: nowrap; }
 .stats-label { color: #334155; }
 .stats-value { color: #94a3b8; }
@@ -191,7 +210,12 @@ body {
 @media (max-width: 374px) { #stats-bar { gap: 2px; } .stats-pill { padding: 2px 4px; font-size: 10px; } }
 
 /* Briefing card */
-#briefing-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; }
+#briefing-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px 16px; margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+:root[data-theme="light"] #briefing-card { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 #briefing-headline { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 8px; font-family: 'DM Mono', monospace; }
 #briefing-lines { font-size: 11px; color: var(--muted); line-height: 1.8; font-family: 'DM Mono', monospace; }
 
@@ -203,7 +227,7 @@ body {
 /* Share button — now uses .header-btn-text */
 
 /* Section label */
-.section-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #334155; padding: 8px 0 4px; }
+.section-label { font-size: 11px; letter-spacing: 0.02em; color: var(--muted); padding: 8px 0 4px; }
 
 /* Tabs */
 #tabs {
@@ -220,8 +244,7 @@ body {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.02em;
   padding: 10px 0;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
@@ -451,7 +474,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 3px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 10px 12px;
 }
 .alert-badge {
@@ -614,13 +637,27 @@ button, input, .tab-btn, .search-result-item, .daily-row, .now-row, .alert-card 
 /* Footer */
 #footer {
   margin-top: auto;
-  padding: 8px 0;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  padding: 12px 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   text-align: center;
-  font-size: 9px;
-  color: #1e293b;
+  font-size: 10px;
+  color: var(--muted);
   position: relative;
   z-index: 1;
+  line-height: 1.6;
+}
+.footer-attr {
+  font-size: 9px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+@keyframes heartPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+.footer-heart {
+  display: inline-block;
+  animation: heartPulse 2s ease-in-out infinite;
 }
 
 /* Mobile polish */
@@ -1051,6 +1088,31 @@ html.theme-transitioning *::after {
 #pull-indicator.refreshing #pull-text {
   display: inline-block;
   animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Confetti burst */
+@keyframes confettiBurst {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0.5); }
+}
+.confetti-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  animation: confettiBurst 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+/* Empty state for all-clear */
+.now-empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.now-empty-mascot {
+  margin-bottom: 8px;
 }
 
 /* Reduced motion */

@@ -72,6 +72,7 @@
       <div id="hero-left">
         <div id="current-temp">--°</div>
         <div id="current-condition">--</div>
+        <div id="weather-mascot"></div>
         <div id="weather-briefing" class="weather-briefing"></div>
         <div id="current-feels">--</div>
         <span id="feels-trend"></span>
@@ -98,9 +99,9 @@
     </div>
 
     <div id="tabs">
-      <button class="tab-btn active" data-tab="tab-15min">15-Min</button>
+      <button class="tab-btn active" data-tab="tab-15min">15 Min</button>
       <button class="tab-btn" data-tab="tab-hourly">Hourly</button>
-      <button class="tab-btn" data-tab="tab-7day">7-Day</button>
+      <button class="tab-btn" data-tab="tab-7day">7 Day</button>
     </div>
 
     <div id="tab-15min" class="tab-panel active"></div>
@@ -108,7 +109,10 @@
     <div id="tab-7day" class="tab-panel"></div>
   </div>
 
-  <div id="footer">WXNOW · Open-Meteo · Nominatim</div>
+  <div id="footer">
+    <div>Built with <span class="footer-heart">🤍</span> · No ads · No tracking · No account</div>
+    <div class="footer-attr">Weather data via Open-Meteo + NOAA</div>
+  </div>
 
   <script>
     if ('serviceWorker' in navigator) {
