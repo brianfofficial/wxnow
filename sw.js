@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wxnow-v1';
+const CACHE_NAME = 'wxnow-v2';
 const STATIC_ASSETS = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

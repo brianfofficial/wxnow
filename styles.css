@@ -533,3 +533,74 @@ button, input, .tab-btn, .search-result-item, .daily-row, .now-row, .alert-card 
   #hero-sparkline { display: none; }
   #current-temp { font-size: 48px; }
 }
+
+/* Toast notification */
+#wxnow-toast {
+  position: fixed;
+  bottom: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  z-index: 9999;
+  opacity: 0;
+  transition: bottom 0.3s ease, opacity 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#wxnow-toast.visible {
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  opacity: 1;
+}
+
+/* Card preview modal */
+#card-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.92);
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#card-preview-overlay.visible { opacity: 1; }
+#card-preview-img {
+  max-width: min(85vw, 360px);
+  max-height: 70vh;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  object-fit: contain;
+}
+#card-preview-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.card-preview-btn {
+  padding: 10px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  cursor: pointer;
+}
+.card-preview-btn.primary {
+  background: var(--accent);
+  color: #020617;
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+/* Save card button */
+#btn-save-card {
+  font-size: 14px;
+}

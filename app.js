@@ -1040,25 +1040,525 @@
     render(lastWeather, lastLocation);
   });
 
+  // --- Weather Card Generator ---
+
+  function getWeatherGradient(weatherCode, dailySlots) {
+    let isDaytime = true;
+    if (dailySlots && dailySlots.length > 0) {
+      const now = Date.now();
+      const rise = new Date(dailySlots[0].sunrise).getTime();
+      const set = new Date(dailySlots[0].sunset).getTime();
+      isDaytime = now > rise && now < set;
+    }
+    const code = weatherCode;
+    if (code === 0 || code === 1) {
+      return isDaytime
+        ? { top: '#0a1628', bottom: '#0d2137' }
+        : { top: '#020617', bottom: '#060d1f' };
+    } else if (code === 2 || code === 3) {
+      return { top: code === 2 ? '#0d1f35' : '#111827', bottom: code === 2 ? '#111827' : '#0f172a' };
+    } else if (code === 45 || code === 48) {
+      return { top: '#111820', bottom: '#0d1520' };
+    } else if (code >= 71 && code <= 77) {
+      return { top: '#101828', bottom: '#1a2436' };
+    } else if (code >= 95 && code <= 99) {
+      return { top: '#0c0a1e', bottom: '#120824' };
+    } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+      return { top: '#0a1525', bottom: '#060f1a' };
+    }
+    return { top: '#0a1525', bottom: '#060f1a' };
+  }
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function generateWeatherCard() {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!lastWeather) return reject(new Error('No weather data'));
+        const W = 1080, H = 1920;
+        let canvas;
+        if (typeof OffscreenCanvas !== 'undefined') {
+          canvas = new OffscreenCanvas(W, H);
+        } else {
+          canvas = document.createElement('canvas');
+          canvas.width = W;
+          canvas.height = H;
+        }
+        const ctx = canvas.getContext('2d');
+        const current = lastWeather.current;
+        const hourlySlots = processHourly(lastWeather.hourly);
+        const dailySlots = processDaily(lastWeather.daily);
+        const location = lastLocation || 'Unknown';
+
+        // --- Background gradient ---
+        const grad = getWeatherGradient(current.weather_code, dailySlots);
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+        bgGrad.addColorStop(0, grad.top);
+        bgGrad.addColorStop(1, grad.bottom);
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
+
+        // Noise overlay
+        const noiseData = ctx.getImageData(0, 0, W, H);
+        const pixels = noiseData.data;
+        for (let i = 0; i < pixels.length; i += 4) {
+          const v = Math.random() * 255;
+          pixels[i] = Math.min(255, pixels[i] + v * 0.03);
+          pixels[i + 1] = Math.min(255, pixels[i + 1] + v * 0.03);
+          pixels[i + 2] = Math.min(255, pixels[i + 2] + v * 0.03);
+        }
+        ctx.putImageData(noiseData, 0, 0);
+
+        const BODY = 'system-ui, -apple-system, sans-serif';
+
+        // --- Top section (y: 80–300) ---
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        // Location
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `600 32px ${BODY}`;
+        ctx.fillText(location, W / 2, 80);
+
+        // "Right Now" label
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = `400 16px ${BODY}`;
+        ctx.fillText('Right Now', W / 2, 124);
+
+        // Current temp — scale down if too wide
+        const tempStr = displayTemp(current.temperature_2m);
+        let tempSize = 120;
+        ctx.font = `800 ${tempSize}px ${BODY}`;
+        while (ctx.measureText(tempStr).width > W * 0.7 && tempSize > 60) {
+          tempSize -= 4;
+          ctx.font = `800 ${tempSize}px ${BODY}`;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(tempStr, W / 2, 152);
+
+        // Condition
+        const w = wmo(current.weather_code);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = `400 20px ${BODY}`;
+        ctx.fillText(`${w.icon} ${w.label}`, W / 2, 152 + tempSize + 8);
+
+        // Feels like
+        ctx.fillStyle = '#64748b';
+        ctx.font = `400 16px ${BODY}`;
+        ctx.fillText(`Feels like ${displayTemp(current.apparent_temperature)}`, W / 2, 152 + tempSize + 44);
+
+        // --- Middle section: Next 12 Hours (y: 340–700) ---
+        const hourly = hourlySlots || [];
+        const hourCount = Math.min(hourly.length, 12);
+        if (hourCount > 0) {
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = `400 16px ${BODY}`;
+          ctx.fillText('Next 12 Hours', W / 2, 340);
+
+          const margin = 60;
+          const usableW = W - margin * 2;
+          const colW = hourCount > 1 ? usableW / hourCount : usableW;
+          const baseY = 370;
+
+          // Gather temps for curve
+          const temps = hourly.slice(0, hourCount).map(s => s.temp);
+          const minT = Math.min(...temps);
+          const maxT = Math.max(...temps);
+          const range = maxT - minT || 1;
+          const curveTop = 460;
+          const curveBottom = 600;
+          const curveH = curveBottom - curveTop;
+
+          // Hour labels, emojis, temps
+          for (let i = 0; i < hourCount; i++) {
+            const x = margin + colW * i + colW / 2;
+            const slot = hourly[i];
+
+            // Hour label
+            ctx.fillStyle = '#64748b';
+            ctx.font = `400 12px ${BODY}`;
+            ctx.fillText(new Date(slot.time).toLocaleTimeString([], { hour: 'numeric' }), x, baseY);
+
+            // Emoji
+            ctx.font = `400 20px ${BODY}`;
+            ctx.fillText(wmo(slot.code).icon, x, baseY + 20);
+
+            // Temp
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `400 14px ${BODY}`;
+            ctx.fillText(displayTemp(slot.temp), x, baseY + 50);
+          }
+
+          // Smooth curve
+          const points = [];
+          for (let i = 0; i < hourCount; i++) {
+            const x = margin + colW * i + colW / 2;
+            const y = curveBottom - ((temps[i] - minT) / range) * curveH;
+            points.push({ x, y });
+          }
+
+          if (points.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 0; i < points.length - 1; i++) {
+              const cx = (points[i].x + points[i + 1].x) / 2;
+              const cy = (points[i].y + points[i + 1].y) / 2;
+              ctx.quadraticCurveTo(points[i].x, points[i].y, cx, cy);
+            }
+            ctx.quadraticCurveTo(
+              points[points.length - 1].x,
+              points[points.length - 1].y,
+              points[points.length - 1].x,
+              points[points.length - 1].y
+            );
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Fill below curve
+            ctx.lineTo(points[points.length - 1].x, curveBottom + 10);
+            ctx.lineTo(points[0].x, curveBottom + 10);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.10)';
+            ctx.fill();
+          }
+        }
+
+        // --- Bottom section: Stat pills (y: 640–710) ---
+        const pillY = 660;
+        const pills = [
+          { emoji: '💨', text: `${displayWind(current.wind_speed_10m)} ${degToCompass(current.wind_direction_10m)}` },
+          { emoji: '💧', text: `${current.relative_humidity_2m}%` },
+          { emoji: '☀️', text: `UV ${dailySlots && dailySlots[0] ? Math.round(dailySlots[0].uvMax) : '—'}` },
+        ];
+        const pillW = 280;
+        const pillH = 48;
+        const pillGap = 30;
+        const totalPillW = pills.length * pillW + (pills.length - 1) * pillGap;
+        const pillStartX = (W - totalPillW) / 2;
+
+        pills.forEach((pill, i) => {
+          const px = pillStartX + i * (pillW + pillGap);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+          roundRect(ctx, px, pillY, pillW, pillH, 20);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `400 14px ${BODY}`;
+          ctx.textAlign = 'center';
+          ctx.fillText(`${pill.emoji} ${pill.text}`, px + pillW / 2, pillY + 16);
+        });
+
+        // --- Alert banner (y: 740, conditional) ---
+        let yOffset = 760;
+        const severeAlert = (activeAlerts || []).find(a => a.severity === 'Extreme' || a.severity === 'Severe');
+        if (severeAlert) {
+          const alertBg = severeAlert.severity === 'Extreme' ? '#7f1d1d' : '#7c2d12';
+          ctx.fillStyle = alertBg;
+          ctx.fillRect(0, yOffset, W, 60);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `700 16px ${BODY}`;
+          ctx.textAlign = 'center';
+          ctx.fillText(`⚠ ${severeAlert.event}`, W / 2, yOffset + 22);
+          yOffset += 80;
+        }
+
+        // --- 7-Day forecast (yOffset → +560) ---
+        if (dailySlots && dailySlots.length > 0) {
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = `400 16px ${BODY}`;
+          ctx.textAlign = 'center';
+          ctx.fillText('7-Day Forecast', W / 2, yOffset);
+          yOffset += 36;
+
+          const weekMin = Math.min(...dailySlots.map(d => d.minTemp));
+          const weekMax = Math.max(...dailySlots.map(d => d.maxTemp));
+          const weekRange = weekMax - weekMin || 1;
+          const rowH = 75;
+          const rowGap = 8;
+          const rowMargin = 60;
+          const barAreaX = 420;
+          const barAreaW = 400;
+
+          dailySlots.forEach((day, idx) => {
+            const ry = yOffset + idx * (rowH + rowGap);
+
+            // Day label
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = `400 16px ${BODY}`;
+            let dayLabel;
+            if (idx === 0) dayLabel = 'TODAY';
+            else if (idx === 1) dayLabel = 'TMR';
+            else dayLabel = new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+            ctx.fillText(dayLabel, rowMargin, ry + 10);
+
+            // Emoji
+            ctx.textAlign = 'center';
+            ctx.font = `400 22px ${BODY}`;
+            ctx.fillText(wmo(day.code).icon, rowMargin + 100, ry + 8);
+
+            // High temp
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `600 16px ${BODY}`;
+            ctx.fillText(displayTemp(day.maxTemp), barAreaX - 16, ry + 10);
+
+            // Low temp
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#64748b';
+            ctx.font = `400 16px ${BODY}`;
+            ctx.fillText(displayTemp(day.minTemp), barAreaX + barAreaW + 16, ry + 10);
+
+            // Temp bar background
+            ctx.fillStyle = '#1e293b';
+            roundRect(ctx, barAreaX, ry + 8, barAreaW, 18, 9);
+            ctx.fill();
+
+            // Temp bar fill
+            const barStart = ((day.minTemp - weekMin) / weekRange) * barAreaW;
+            const barEnd = ((day.maxTemp - weekMin) / weekRange) * barAreaW;
+            const barFillW = Math.max(barEnd - barStart, 12);
+            const barGrad = ctx.createLinearGradient(barAreaX + barStart, 0, barAreaX + barStart + barFillW, 0);
+            barGrad.addColorStop(0, '#38bdf8');
+            barGrad.addColorStop(1, '#f59e0b');
+            ctx.fillStyle = barGrad;
+            roundRect(ctx, barAreaX + barStart, ry + 8, barFillW, 18, 9);
+            ctx.fill();
+          });
+
+          yOffset += dailySlots.length * (rowH + rowGap);
+        }
+
+        // --- Footer branding (bottom area) ---
+        const footerY = Math.max(yOffset + 40, 1700);
+
+        // Divider
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.2, footerY);
+        ctx.lineTo(W * 0.8, footerY);
+        ctx.stroke();
+
+        // WXNOW wordmark
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = `800 28px ${BODY}`;
+        ctx.fillText('WXNOW', W / 2, footerY + 24);
+
+        // URL
+        ctx.fillStyle = '#475569';
+        ctx.font = `400 14px ${BODY}`;
+        ctx.fillText('wxnow.vercel.app', W / 2, footerY + 62);
+
+        // Tagline
+        ctx.fillStyle = '#334155';
+        ctx.font = `400 12px ${BODY}`;
+        ctx.fillText('Minute-by-minute weather · No ads · No account', W / 2, footerY + 86);
+
+        // --- Export as PNG blob ---
+        if (canvas.convertToBlob) {
+          canvas.convertToBlob({ type: 'image/png' }).then(resolve).catch(reject);
+        } else {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas toBlob failed'));
+          }, 'image/png');
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  // --- Toast notification ---
+  function showToast(msg) {
+    let toast = document.getElementById('wxnow-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'wxnow-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), 2500);
+  }
+
+  // --- Card Preview Modal ---
+  function showCardPreview(blob) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const overlay = document.createElement('div');
+      overlay.id = 'card-preview-overlay';
+
+      const img = document.createElement('img');
+      img.src = url;
+      img.id = 'card-preview-img';
+
+      const btnRow = document.createElement('div');
+      btnRow.id = 'card-preview-btns';
+
+      const shareBtn = document.createElement('button');
+      shareBtn.textContent = 'Share';
+      shareBtn.className = 'card-preview-btn primary';
+      shareBtn.addEventListener('click', () => { cleanup(); resolve('share'); });
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'Save';
+      saveBtn.className = 'card-preview-btn';
+      saveBtn.addEventListener('click', () => { cleanup(); resolve('save'); });
+
+      btnRow.appendChild(shareBtn);
+      btnRow.appendChild(saveBtn);
+      overlay.appendChild(img);
+      overlay.appendChild(btnRow);
+      document.body.appendChild(overlay);
+
+      // Force reflow then animate in
+      overlay.offsetHeight;
+      overlay.classList.add('visible');
+
+      // Dismiss on outside click
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { cleanup(); resolve('dismiss'); }
+      });
+
+      function cleanup() {
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+          overlay.remove();
+          URL.revokeObjectURL(url);
+        }, 300);
+      }
+    });
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function cardFilename() {
+    const loc = (lastLocation || 'weather').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+    const date = new Date().toISOString().slice(0, 10);
+    return `wxnow-${loc}-${date}.png`;
+  }
+
+  async function shareWithCard() {
+    const blob = await generateWeatherCard();
+    const file = new File([blob], 'wxnow-weather.png', { type: 'image/png' });
+    const text = generateShareText(lastWeather, lastLocation, activeAlerts);
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+    } else if (navigator.share) {
+      await navigator.share({ text, url: 'https://wxnow.vercel.app' });
+    } else {
+      downloadBlob(blob, cardFilename());
+      showToast('Weather card saved!');
+    }
+  }
+
   // Share button
   el.btnShare.addEventListener('click', async () => {
     if (!lastWeather) return;
-    const text = generateShareText(lastWeather, lastLocation, activeAlerts);
+    const origText = el.btnShare.textContent;
+    el.btnShare.textContent = '···';
+    el.btnShare.disabled = true;
     try {
-      if (navigator.share) {
-        await navigator.share({ text });
+      const start = performance.now();
+      const blob = await generateWeatherCard();
+      const elapsed = performance.now() - start;
+
+      if (elapsed < 500) {
+        // Show preview
+        const action = await showCardPreview(blob);
+        if (action === 'share') {
+          const file = new File([blob], 'wxnow-weather.png', { type: 'image/png' });
+          const text = generateShareText(lastWeather, lastLocation, activeAlerts);
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text });
+          } else if (navigator.share) {
+            await navigator.share({ text, url: 'https://wxnow.vercel.app' });
+          } else {
+            downloadBlob(blob, cardFilename());
+            showToast('Weather card saved!');
+          }
+        } else if (action === 'save') {
+          downloadBlob(blob, cardFilename());
+          showToast('Weather card saved!');
+        }
       } else {
-        await navigator.clipboard.writeText(text);
+        // Skip preview, share directly
+        await shareWithCard();
       }
       el.btnShare.textContent = '✓';
-      setTimeout(() => { el.btnShare.textContent = '↑'; }, 2000);
-    } catch {
-      // User cancelled share or clipboard failed — ignore silently
+      setTimeout(() => { el.btnShare.textContent = origText; }, 2000);
+    } catch (err) {
+      // Fall back to text-only share
       try {
-        await navigator.clipboard.writeText(text);
+        const text = generateShareText(lastWeather, lastLocation, activeAlerts);
+        if (navigator.share) {
+          await navigator.share({ text });
+        } else {
+          await navigator.clipboard.writeText(text);
+          showToast('Weather copied to clipboard');
+        }
         el.btnShare.textContent = '✓';
-        setTimeout(() => { el.btnShare.textContent = '↑'; }, 2000);
-      } catch { /* no-op */ }
+        setTimeout(() => { el.btnShare.textContent = origText; }, 2000);
+      } catch { /* user cancelled */ }
+    } finally {
+      el.btnShare.disabled = false;
+      if (el.btnShare.textContent === '···') el.btnShare.textContent = origText;
+    }
+  });
+
+  // Save Card button
+  const btnSaveCard = document.createElement('button');
+  btnSaveCard.id = 'btn-save-card';
+  btnSaveCard.className = 'header-btn';
+  btnSaveCard.textContent = '🖼';
+  btnSaveCard.title = 'Save weather card';
+  el.btnShare.parentElement.insertBefore(btnSaveCard, el.btnShare.nextSibling);
+
+  btnSaveCard.addEventListener('click', async () => {
+    if (!lastWeather) return;
+    btnSaveCard.disabled = true;
+    btnSaveCard.textContent = '···';
+    try {
+      const blob = await generateWeatherCard();
+      downloadBlob(blob, cardFilename());
+      showToast('Weather card saved!');
+      btnSaveCard.textContent = '✓';
+      setTimeout(() => { btnSaveCard.textContent = '🖼'; }, 2000);
+    } catch {
+      showToast('Could not generate card');
+    } finally {
+      btnSaveCard.disabled = false;
+      if (btnSaveCard.textContent === '···') btnSaveCard.textContent = '🖼';
     }
   });
 
