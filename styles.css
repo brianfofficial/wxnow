@@ -218,9 +218,11 @@ body {
 /* Current conditions — centered single column in hero card */
 #current { padding: 4px 0; }
 #current-temp {
-  font-family: 'Syne', sans-serif; font-size: 72px; font-weight: 800;
-  letter-spacing: -3px; line-height: 1; color: #ffffff;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  font-family: system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  font-size: 88px; font-weight: 700;
+  letter-spacing: -2px; line-height: 1; color: #ffffff;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.15);
+  margin: 4px 0;
 }
 #current-condition {
   font-family: 'Inter', system-ui, sans-serif;
@@ -234,7 +236,7 @@ body {
   font-family: 'DM Mono', monospace;
   font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 6px; display: inline;
 }
-#feels-trend { font-size: 10px; margin-left: 6px; font-weight: 500; color: rgba(255,255,255,0.55); }
+#feels-trend { font-size: 11px; margin-left: 6px; font-weight: 500; color: rgba(255,255,255,0.5) !important; }
 
 /* Rain summary */
 #rain-summary { font-size: 12px; color: #94a3b8; margin-top: 4px; padding: 0; }
@@ -328,10 +330,11 @@ body {
 }
 .now-row .now-bar-wrap {
   height: 6px;
-  background: var(--border);
+  background: #2a3444;
   border-radius: 3px;
   overflow: hidden;
 }
+:root[data-theme="light"] .now-row .now-bar-wrap { background: #e2e8f0; }
 .now-row .now-bar {
   height: 100%;
   background: var(--accent);
@@ -412,18 +415,19 @@ body {
 }
 .hourly-row .hr-prob-wrap {
   height: 6px;
-  background: var(--border);
+  background: #2a3444;
   border-radius: 3px;
   overflow: hidden;
 }
+:root[data-theme="light"] .hourly-row .hr-prob-wrap { background: #e2e8f0; }
 .hourly-row .hr-prob-bar {
   height: 100%;
   border-radius: 3px;
   transition: width 0.15s ease;
 }
-.hr-prob-bar.prob-low { background: var(--border); }
-.hr-prob-bar.prob-med { background: var(--accent); }
-.hr-prob-bar.prob-high { background: var(--accent-dark); }
+.hr-prob-bar.prob-low { background: #475569; }
+.hr-prob-bar.prob-med { background: #38bdf8; }
+.hr-prob-bar.prob-high { background: #0ea5e9; }
 .hourly-row .hr-temp {
   text-align: right;
   font-weight: 500;
@@ -465,14 +469,15 @@ body {
 .daily-temps .lo { color: var(--muted); }
 .daily-prob-wrap {
   height: 6px;
-  background: var(--border);
+  background: #2a3444;
   border-radius: 3px;
   overflow: hidden;
 }
+:root[data-theme="light"] .daily-prob-wrap { background: #e2e8f0; }
 .daily-prob-bar {
   height: 100%;
   border-radius: 3px;
-  min-width: 2px;
+  min-width: 12%;
 }
 .daily-uv { font-size: 0.6rem; font-weight: 500; text-align: right; white-space: nowrap; }
 .daily-sub {
@@ -1033,12 +1038,6 @@ button, input, .tab-btn, .search-result-item, .daily-row, .now-row, .alert-card 
   background: rgba(14, 165, 233, 0.08);
 }
 
-/* Bar track visibility */
-:root[data-theme="light"] .hr-prob-wrap,
-:root[data-theme="light"] .now-bar-wrap,
-:root[data-theme="light"] .daily-prob-wrap {
-  background: #cbd5e1;
-}
 
 /* Footer heart */
 :root[data-theme="light"] .footer-heart { color: var(--accent); }

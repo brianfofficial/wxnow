@@ -755,7 +755,7 @@
       const probBar = document.createElement('div');
       probBar.className = 'daily-prob-bar';
       const prob = day.precipProb;
-      probBar.style.background = prob > 50 ? '#0284c7' : prob > 20 ? '#38bdf8' : '#1e293b';
+      probBar.style.background = prob > 50 ? '#0ea5e9' : prob > 20 ? '#38bdf8' : '#475569';
       probBar.dataset.finalWidth = `${prob}%`;
       probBar.style.width = `${prob}%`;
       probWrap.appendChild(probBar);
@@ -1895,6 +1895,11 @@
         }
         ctx.putImageData(noiseData, 0, 0);
 
+        // Frosted card behind temp area
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        roundRect(ctx, 70, 50, W - 140, 280, 20);
+        ctx.fill();
+
         const BODY = 'system-ui, -apple-system, sans-serif';
         const light = isLightTheme();
         const textPrimary = light ? '#0f172a' : '#ffffff';
@@ -1902,7 +1907,7 @@
         const textTertiary = light ? '#64748b' : '#64748b';
         const textDim = light ? '#94a3b8' : '#475569';
         const pillBg = light ? 'rgba(241,245,249,0.8)' : 'rgba(15, 23, 42, 0.6)';
-        const barBg = light ? '#e2e8f0' : '#1e293b';
+        const barBg = light ? '#e2e8f0' : '#2a3444';
         const accentColor = light ? '#0284c7' : '#38bdf8';
         const footerDim = light ? '#94a3b8' : '#334155';
 
