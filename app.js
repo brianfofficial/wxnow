@@ -808,6 +808,69 @@
     el.bgGlow.style.opacity = glowOp;
   }
 
+  // --- Weather Briefing (personality) ---
+
+  function getWeatherBriefing(weather, dailySlots, hourlySlots) {
+    if (!weather || !weather.current) return 'Loading...';
+    const c = weather.current;
+    const code = c.weather_code;
+    const temp = c.apparent_temperature;
+
+    // Alerts first
+    const extreme = (activeAlerts || []).find(a => a.severity === 'Extreme');
+    if (extreme) return 'Severe weather active. Stay safe.';
+    const severe = (activeAlerts || []).find(a => a.severity === 'Severe');
+    if (severe) return 'Weather alert in your area.';
+
+    // Active precipitation
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+      const precip = c.precipitation != null ? c.precipitation : 0;
+      return `It's raining. ${precip}" in the last hour.`;
+    }
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'Snow falling. Bundle up.';
+    if (code >= 95 && code <= 99) return 'Thunderstorms. Stay indoors if you can.';
+
+    // Upcoming rain
+    if (hourlySlots && hourlySlots.length > 0) {
+      const nextProb = hourlySlots[0].prob;
+      if (nextProb > 80) return 'Rain likely within the hour.';
+      if (nextProb > 50) return 'Rain possible soon. Heads up.';
+    }
+
+    // Temperature extremes
+    if (temp > 100) return 'Dangerously hot. Hydrate.';
+    if (temp > 90) return "It's a scorcher. Stay cool.";
+    if (temp < 20) return 'Bitterly cold. Layer up.';
+    if (temp < 32) return 'Below freezing. Watch for ice.';
+
+    // Wind
+    if (c.wind_speed_10m > 30) return 'Very windy. Hold onto your hat.';
+
+    // UV
+    const uv = dailySlots && dailySlots[0] ? dailySlots[0].uvMax : 0;
+    if (uv > 8) return 'UV is extreme. Sunscreen is mandatory.';
+    if (uv > 5) return 'UV is high. Wear sunscreen.';
+
+    // Daytime check
+    let isDaytime = true;
+    if (dailySlots && dailySlots.length > 0) {
+      const now = Date.now();
+      isDaytime = now > new Date(dailySlots[0].sunrise).getTime() && now < new Date(dailySlots[0].sunset).getTime();
+    }
+
+    // Clear/pleasant conditions
+    if (code <= 1) {
+      if (isDaytime && temp >= 65 && temp <= 80) return 'Perfect weather. Get outside.';
+      if (isDaytime) return 'Clear skies.';
+      return 'Clear night.';
+    }
+    if (code === 2) return 'Partly cloudy.';
+    if (code === 3) return 'Overcast.';
+    if (code === 45 || code === 48) return 'Foggy. Low visibility.';
+
+    return 'Weather data loaded.';
+  }
+
   // --- Main render orchestrator ---
 
   function render(weather, location) {
@@ -818,6 +881,10 @@
     const dailySlots = processDaily(weather.daily);
 
     renderCurrent(current, location);
+
+    // Weather briefing
+    const briefingEl = $('weather-briefing');
+    if (briefingEl) briefingEl.textContent = getWeatherBriefing(weather, dailySlots, hourlySlots);
     renderFeelsTrend(current, hourlySlots);
     renderSparkline(hourlySlots);
     renderRainSummary(minutelySlots);
@@ -1013,7 +1080,179 @@
     }
   });
 
-  load();
+  // --- Onboarding ---
+  let needsOnboarding = false;
+  try { needsOnboarding = !localStorage.getItem('wxnow-onboarded'); } catch { needsOnboarding = false; }
+
+  if (needsOnboarding) {
+    // Build onboarding overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'onboarding';
+
+    const screens = [
+      {
+        heading: 'Weather, not noise.',
+        subtext: 'Minute-by-minute forecasts. No ads. No account. No drama.',
+        visual: '<div class="onboard-pulse"></div>',
+      },
+      {
+        heading: 'Know before it rains.',
+        subtext: '15-minute precipitation windows. Best time to go outside. Severe weather alerts from NOAA.',
+        visual: '<div class="onboard-precip-mock">'
+          + '<div class="onboard-precip-bar" style="height:20px;background:#22c55e"></div>'
+          + '<div class="onboard-precip-bar" style="height:35px;background:#4ade80"></div>'
+          + '<div class="onboard-precip-bar" style="height:50px;background:#facc15"></div>'
+          + '<div class="onboard-precip-bar" style="height:40px;background:#f59e0b"></div>'
+          + '<div class="onboard-precip-bar" style="height:25px;background:#f97316"></div>'
+          + '<div class="onboard-precip-bar" style="height:15px;background:#ef4444"></div>'
+          + '</div>',
+      },
+      {
+        heading: 'One tap. Your weather.',
+        subtext: 'WXNOW needs your location to show local weather. Nothing is stored. Nothing is tracked.',
+        visual: '<div class="onboard-pin">📍</div>',
+      },
+    ];
+
+    let currentScreen = 0;
+    const screenEls = [];
+
+    screens.forEach((s, i) => {
+      const div = document.createElement('div');
+      div.className = 'onboard-screen' + (i === 0 ? ' active' : '');
+      div.innerHTML = `
+        <div class="onboard-heading">${s.heading}</div>
+        <div class="onboard-subtext">${s.subtext}</div>
+        ${s.visual}
+      `;
+      screenEls.push(div);
+      overlay.appendChild(div);
+    });
+
+    // Dots
+    const dotsWrap = document.createElement('div');
+    dotsWrap.className = 'onboard-dots';
+    const dots = [];
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'onboard-dot' + (i === 0 ? ' active' : '');
+      dots.push(dot);
+      dotsWrap.appendChild(dot);
+    }
+    overlay.appendChild(dotsWrap);
+
+    // Nav buttons container
+    const navWrap = document.createElement('div');
+    navWrap.className = 'onboard-nav';
+    navWrap.style.marginTop = '16px';
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'onboard-nav-btn';
+    backBtn.textContent = '← Back';
+    backBtn.style.visibility = 'hidden';
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'onboard-nav-btn';
+    nextBtn.textContent = 'Next →';
+
+    navWrap.appendChild(backBtn);
+    navWrap.appendChild(nextBtn);
+    overlay.appendChild(navWrap);
+
+    // Screen 3 action buttons (hidden initially)
+    const actionWrap = document.createElement('div');
+    actionWrap.style.display = 'none';
+    actionWrap.style.flexDirection = 'column';
+    actionWrap.style.alignItems = 'center';
+    actionWrap.style.gap = '12px';
+    actionWrap.style.marginTop = '16px';
+    actionWrap.style.width = '100%';
+    actionWrap.style.maxWidth = '280px';
+
+    const enableBtn = document.createElement('button');
+    enableBtn.className = 'onboard-btn';
+    enableBtn.textContent = 'Enable Location →';
+
+    const searchLink = document.createElement('button');
+    searchLink.className = 'onboard-btn-secondary';
+    searchLink.textContent = 'Or search a city instead';
+
+    actionWrap.appendChild(enableBtn);
+    actionWrap.appendChild(searchLink);
+    overlay.appendChild(actionWrap);
+
+    document.body.appendChild(overlay);
+
+    function goToScreen(idx) {
+      if (idx < 0 || idx > 2) return;
+      screenEls[currentScreen].classList.remove('active');
+      dots[currentScreen].classList.remove('active');
+      currentScreen = idx;
+      screenEls[currentScreen].classList.add('active');
+      dots[currentScreen].classList.add('active');
+
+      backBtn.style.visibility = currentScreen === 0 ? 'hidden' : 'visible';
+
+      if (currentScreen === 2) {
+        navWrap.style.display = 'none';
+        actionWrap.style.display = 'flex';
+      } else {
+        navWrap.style.display = 'flex';
+        actionWrap.style.display = 'none';
+      }
+    }
+
+    nextBtn.addEventListener('click', () => goToScreen(currentScreen + 1));
+    backBtn.addEventListener('click', () => goToScreen(currentScreen - 1));
+
+    function dismissOnboarding() {
+      try { localStorage.setItem('wxnow-onboarded', 'true'); } catch {}
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.remove(), 300);
+    }
+
+    enableBtn.addEventListener('click', async () => {
+      enableBtn.textContent = 'Locating...';
+      enableBtn.disabled = true;
+      try {
+        const pos = await getPosition();
+        savedLat = pos.coords.latitude;
+        savedLon = pos.coords.longitude;
+        dismissOnboarding();
+        debouncedFetch(savedLat, savedLon);
+      } catch {
+        dismissOnboarding();
+        el.searchInput.focus();
+        showError('Location denied. Search for a city above.', false);
+      }
+    });
+
+    searchLink.addEventListener('click', () => {
+      dismissOnboarding();
+      el.searchInput.focus();
+    });
+
+    // Swipe navigation
+    let touchStartX = 0;
+    overlay.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    overlay.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (dx < -50) goToScreen(currentScreen + 1);
+      else if (dx > 50) goToScreen(currentScreen - 1);
+    }, { passive: true });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (!document.getElementById('onboarding')) return;
+      if (e.key === 'ArrowRight') goToScreen(currentScreen + 1);
+      else if (e.key === 'ArrowLeft') goToScreen(currentScreen - 1);
+    });
+
+    // Hide loading spinner since onboarding is showing
+    el.loading.classList.add('hidden');
+  } else {
+    load();
+  }
 
   // Radar button
   function radarStation(lat) {

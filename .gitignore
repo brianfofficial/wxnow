@@ -1,6 +1,8 @@
 node_modules/
 package-lock.json
 generate-icons.js
+generate-og.js
 package.json
 .DS_Store
 *.log
+.vercel
