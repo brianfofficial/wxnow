@@ -23,6 +23,14 @@
   <meta name="twitter:description" content="Free hyperlocal weather. No ads. No account.">
   <meta name="twitter:image" content="https://wxnow.vercel.app/og-image.png">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      var t = localStorage.getItem('wxnow-theme');
+      if (t) document.documentElement.dataset.theme = t;
+      else if (window.matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.dataset.theme = 'light';
+    } catch(e) {}
+  </script>
 </head>
 <body>
   <div id="precip-indicator"></div>
@@ -31,10 +39,15 @@
   <div id="header">
     <h1>WXNOW</h1>
     <div class="header-actions">
-      <button id="btn-share">↑</button>
-      <button id="btn-unit" class="header-btn">°C</button>
-      <button id="btn-radar" class="header-btn">RADAR ↗</button>
-      <button id="btn-refresh">↻ Refresh</button>
+      <div class="header-actions-row">
+        <button id="btn-theme" class="header-btn-icon" title="Toggle theme">☀</button>
+        <button id="btn-unit" class="header-btn-icon" title="Toggle units">°C</button>
+        <button id="btn-refresh" class="header-btn-icon" title="Refresh">↻</button>
+      </div>
+      <div class="header-actions-row">
+        <button id="btn-radar" class="header-btn-text">RADAR ↗</button>
+        <button id="btn-share" class="header-btn-text">SHARE</button>
+      </div>
     </div>
   </div>
 

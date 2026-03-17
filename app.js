@@ -104,6 +104,11 @@
 
   try { if (localStorage.getItem('wxnow-unit') === 'c') useFahrenheit = false; } catch {}
 
+  // Theme init (blocking script in <head> handles the data attribute; this syncs button text)
+  function isLightTheme() {
+    return document.documentElement.dataset.theme === 'light';
+  }
+
   function displayTemp(f) {
     return useFahrenheit ? Math.round(f) + '°' : Math.round((f - 32) * 5 / 9) + '°';
   }
@@ -771,39 +776,46 @@
       isDaytime = now > rise && now < set;
     }
 
+    const light = isLightTheme();
     let top, bottom, glowBg, glowOp;
     const code = weatherCode;
 
     if (code === 0 || code === 1) {
       if (isDaytime) {
-        top = '#0a1628'; bottom = '#0d2137';
-        glowBg = 'radial-gradient(circle, rgba(56,189,248,0.06), transparent)';
-        glowOp = '1';
+        if (light) { top = '#e0f2fe'; bottom = '#f0f9ff'; }
+        else { top = '#0a1628'; bottom = '#0d2137'; }
+        glowBg = light ? '' : 'radial-gradient(circle, rgba(56,189,248,0.06), transparent)';
+        glowOp = light ? '0' : '1';
       } else {
-        top = '#020617'; bottom = '#060d1f';
+        // Night always dark even in light mode
+        top = '#1e293b'; bottom = '#334155';
         glowBg = ''; glowOp = '0';
       }
     } else if (code === 2 || code === 3) {
-      top = code === 2 ? '#0d1f35' : '#111827';
-      bottom = code === 2 ? '#111827' : '#0f172a';
+      if (light) { top = '#e2e8f0'; bottom = '#f1f5f9'; }
+      else { top = code === 2 ? '#0d1f35' : '#111827'; bottom = code === 2 ? '#111827' : '#0f172a'; }
       glowBg = ''; glowOp = '0';
     } else if (code === 45 || code === 48) {
-      top = '#111820'; bottom = '#0d1520';
+      if (light) { top = '#e2e8f0'; bottom = '#f1f5f9'; }
+      else { top = '#111820'; bottom = '#0d1520'; }
       glowBg = ''; glowOp = '0';
     } else if (code >= 71 && code <= 77) {
-      top = '#101828'; bottom = '#1a2436';
+      if (light) { top = '#f1f5f9'; bottom = '#ffffff'; }
+      else { top = '#101828'; bottom = '#1a2436'; }
       glowBg = ''; glowOp = '0';
     } else if (code >= 95 && code <= 99) {
-      top = '#0c0a1e'; bottom = '#120824';
-      glowBg = 'radial-gradient(circle, rgba(139,92,246,0.08), transparent)';
-      glowOp = '1';
+      if (light) { top = '#94a3b8'; bottom = '#cbd5e1'; }
+      else { top = '#0c0a1e'; bottom = '#120824'; }
+      glowBg = light ? '' : 'radial-gradient(circle, rgba(139,92,246,0.08), transparent)';
+      glowOp = light ? '0' : '1';
     } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      top = '#0a1525'; bottom = '#060f1a';
-      glowBg = 'radial-gradient(circle, rgba(14,116,144,0.07), transparent)';
-      glowOp = '1';
+      if (light) { top = '#cbd5e1'; bottom = '#e2e8f0'; }
+      else { top = '#0a1525'; bottom = '#060f1a'; }
+      glowBg = light ? '' : 'radial-gradient(circle, rgba(14,116,144,0.07), transparent)';
+      glowOp = light ? '0' : '1';
     } else {
-      // Default: rain-like for unknown codes
-      top = '#0a1525'; bottom = '#060f1a';
+      if (light) { top = '#cbd5e1'; bottom = '#e2e8f0'; }
+      else { top = '#0a1525'; bottom = '#060f1a'; }
       glowBg = ''; glowOp = '0';
     }
 
@@ -1429,6 +1441,35 @@
     render(lastWeather, lastLocation);
   });
 
+  // Theme toggle
+  const btnTheme = $('btn-theme');
+  btnTheme.textContent = isLightTheme() ? '🌙' : '☀';
+
+  function toggleTheme() {
+    const current = document.documentElement.dataset.theme || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('wxnow-theme', next); } catch {}
+    btnTheme.textContent = next === 'dark' ? '☀' : '🌙';
+    if (lastWeather) {
+      const dailySlots = processDaily(lastWeather.daily);
+      applyWeatherBackground(lastWeather.current.weather_code, dailySlots);
+    }
+  }
+
+  btnTheme.addEventListener('click', toggleTheme);
+
+  // OS-level preference changes
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+    try { if (localStorage.getItem('wxnow-theme')) return; } catch {}
+    document.documentElement.dataset.theme = e.matches ? 'light' : 'dark';
+    btnTheme.textContent = e.matches ? '🌙' : '☀';
+    if (lastWeather) {
+      const dailySlots = processDaily(lastWeather.daily);
+      applyWeatherBackground(lastWeather.current.weather_code, dailySlots);
+    }
+  });
+
   // --- Weather Card Generator ---
 
   function getWeatherGradient(weatherCode, dailySlots) {
@@ -1439,23 +1480,24 @@
       const set = new Date(dailySlots[0].sunset).getTime();
       isDaytime = now > rise && now < set;
     }
+    const light = isLightTheme();
     const code = weatherCode;
     if (code === 0 || code === 1) {
-      return isDaytime
-        ? { top: '#0a1628', bottom: '#0d2137' }
-        : { top: '#020617', bottom: '#060d1f' };
+      if (!isDaytime) return { top: '#1e293b', bottom: '#334155' };
+      return light ? { top: '#e0f2fe', bottom: '#f0f9ff' } : { top: '#0a1628', bottom: '#0d2137' };
     } else if (code === 2 || code === 3) {
-      return { top: code === 2 ? '#0d1f35' : '#111827', bottom: code === 2 ? '#111827' : '#0f172a' };
+      return light ? { top: '#e2e8f0', bottom: '#f1f5f9' }
+        : { top: code === 2 ? '#0d1f35' : '#111827', bottom: code === 2 ? '#111827' : '#0f172a' };
     } else if (code === 45 || code === 48) {
-      return { top: '#111820', bottom: '#0d1520' };
+      return light ? { top: '#e2e8f0', bottom: '#f1f5f9' } : { top: '#111820', bottom: '#0d1520' };
     } else if (code >= 71 && code <= 77) {
-      return { top: '#101828', bottom: '#1a2436' };
+      return light ? { top: '#f1f5f9', bottom: '#ffffff' } : { top: '#101828', bottom: '#1a2436' };
     } else if (code >= 95 && code <= 99) {
-      return { top: '#0c0a1e', bottom: '#120824' };
+      return light ? { top: '#94a3b8', bottom: '#cbd5e1' } : { top: '#0c0a1e', bottom: '#120824' };
     } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      return { top: '#0a1525', bottom: '#060f1a' };
+      return light ? { top: '#cbd5e1', bottom: '#e2e8f0' } : { top: '#0a1525', bottom: '#060f1a' };
     }
-    return { top: '#0a1525', bottom: '#060f1a' };
+    return light ? { top: '#cbd5e1', bottom: '#e2e8f0' } : { top: '#0a1525', bottom: '#060f1a' };
   }
 
   function hexToRgb(hex) {
@@ -1502,18 +1544,27 @@
         ctx.putImageData(noiseData, 0, 0);
 
         const BODY = 'system-ui, -apple-system, sans-serif';
+        const light = isLightTheme();
+        const textPrimary = light ? '#0f172a' : '#ffffff';
+        const textSecondary = light ? '#64748b' : '#94a3b8';
+        const textTertiary = light ? '#64748b' : '#64748b';
+        const textDim = light ? '#94a3b8' : '#475569';
+        const pillBg = light ? 'rgba(241,245,249,0.8)' : 'rgba(15, 23, 42, 0.6)';
+        const barBg = light ? '#e2e8f0' : '#1e293b';
+        const accentColor = light ? '#0284c7' : '#38bdf8';
+        const footerDim = light ? '#94a3b8' : '#334155';
 
         // --- Top section (y: 80–300) ---
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
         // Location
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = textPrimary;
         ctx.font = `600 32px ${BODY}`;
         ctx.fillText(location, W / 2, 80);
 
         // "Right Now" label
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = textSecondary;
         ctx.font = `400 16px ${BODY}`;
         ctx.fillText('Right Now', W / 2, 124);
 
@@ -1525,17 +1576,17 @@
           tempSize -= 4;
           ctx.font = `800 ${tempSize}px ${BODY}`;
         }
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = textPrimary;
         ctx.fillText(tempStr, W / 2, 152);
 
         // Condition
         const w = wmo(current.weather_code);
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = textSecondary;
         ctx.font = `400 20px ${BODY}`;
         ctx.fillText(`${w.icon} ${w.label}`, W / 2, 152 + tempSize + 8);
 
         // Feels like
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = textTertiary;
         ctx.font = `400 16px ${BODY}`;
         ctx.fillText(`Feels like ${displayTemp(current.apparent_temperature)}`, W / 2, 152 + tempSize + 44);
 
@@ -1543,7 +1594,7 @@
         const hourly = hourlySlots || [];
         const hourCount = Math.min(hourly.length, 12);
         if (hourCount > 0) {
-          ctx.fillStyle = '#94a3b8';
+          ctx.fillStyle = textSecondary;
           ctx.font = `400 16px ${BODY}`;
           ctx.fillText('Next 12 Hours', W / 2, 340);
 
@@ -1567,7 +1618,7 @@
             const slot = hourly[i];
 
             // Hour label
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = textDim;
             ctx.font = `400 12px ${BODY}`;
             ctx.fillText(new Date(slot.time).toLocaleTimeString([], { hour: 'numeric' }), x, baseY);
 
@@ -1576,7 +1627,7 @@
             ctx.fillText(wmo(slot.code).icon, x, baseY + 20);
 
             // Temp
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = textPrimary;
             ctx.font = `400 14px ${BODY}`;
             ctx.fillText(displayTemp(slot.temp), x, baseY + 50);
           }
@@ -1603,7 +1654,7 @@
               points[points.length - 1].x,
               points[points.length - 1].y
             );
-            ctx.strokeStyle = '#38bdf8';
+            ctx.strokeStyle = accentColor;
             ctx.lineWidth = 2;
             ctx.stroke();
 
@@ -1631,10 +1682,10 @@
 
         pills.forEach((pill, i) => {
           const px = pillStartX + i * (pillW + pillGap);
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+          ctx.fillStyle = pillBg;
           roundRect(ctx, px, pillY, pillW, pillH, 20);
           ctx.fill();
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = textPrimary;
           ctx.font = `400 14px ${BODY}`;
           ctx.textAlign = 'center';
           ctx.fillText(`${pill.emoji} ${pill.text}`, px + pillW / 2, pillY + 16);
@@ -1656,7 +1707,7 @@
 
         // --- 7-Day forecast (yOffset → +560) ---
         if (dailySlots && dailySlots.length > 0) {
-          ctx.fillStyle = '#94a3b8';
+          ctx.fillStyle = textSecondary;
           ctx.font = `400 16px ${BODY}`;
           ctx.textAlign = 'center';
           ctx.fillText('7-Day Forecast', W / 2, yOffset);
@@ -1676,7 +1727,7 @@
 
             // Day label
             ctx.textAlign = 'left';
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = textSecondary;
             ctx.font = `400 16px ${BODY}`;
             let dayLabel;
             if (idx === 0) dayLabel = 'TODAY';
@@ -1691,18 +1742,18 @@
 
             // High temp
             ctx.textAlign = 'right';
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = textPrimary;
             ctx.font = `600 16px ${BODY}`;
             ctx.fillText(displayTemp(day.maxTemp), barAreaX - 16, ry + 10);
 
             // Low temp
             ctx.textAlign = 'left';
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = textTertiary;
             ctx.font = `400 16px ${BODY}`;
             ctx.fillText(displayTemp(day.minTemp), barAreaX + barAreaW + 16, ry + 10);
 
             // Temp bar background
-            ctx.fillStyle = '#1e293b';
+            ctx.fillStyle = barBg;
             roundRect(ctx, barAreaX, ry + 8, barAreaW, 18, 9);
             ctx.fill();
 
@@ -1725,7 +1776,7 @@
         const footerY = Math.max(yOffset + 40, 1700);
 
         // Divider
-        ctx.strokeStyle = '#1e293b';
+        ctx.strokeStyle = barBg;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(W * 0.2, footerY);
@@ -1734,17 +1785,17 @@
 
         // WXNOW wordmark
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = accentColor;
         ctx.font = `800 28px ${BODY}`;
         ctx.fillText('WXNOW', W / 2, footerY + 24);
 
         // URL
-        ctx.fillStyle = '#475569';
+        ctx.fillStyle = textDim;
         ctx.font = `400 14px ${BODY}`;
         ctx.fillText('wxnow.vercel.app', W / 2, footerY + 62);
 
         // Tagline
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = footerDim;
         ctx.font = `400 12px ${BODY}`;
         ctx.fillText('Minute-by-minute weather · No ads · No account', W / 2, footerY + 86);
 
@@ -1922,32 +1973,6 @@
     } finally {
       el.btnShare.disabled = false;
       if (el.btnShare.textContent === '···') el.btnShare.textContent = origText;
-    }
-  });
-
-  // Save Card button
-  const btnSaveCard = document.createElement('button');
-  btnSaveCard.id = 'btn-save-card';
-  btnSaveCard.className = 'header-btn';
-  btnSaveCard.textContent = '🖼';
-  btnSaveCard.title = 'Save weather card';
-  el.btnShare.parentElement.insertBefore(btnSaveCard, el.btnShare.nextSibling);
-
-  btnSaveCard.addEventListener('click', async () => {
-    if (!lastWeather) return;
-    btnSaveCard.disabled = true;
-    btnSaveCard.textContent = '···';
-    try {
-      const blob = await generateWeatherCard();
-      downloadBlob(blob, cardFilename());
-      showToast('Weather card saved!');
-      btnSaveCard.textContent = '✓';
-      setTimeout(() => { btnSaveCard.textContent = '🖼'; }, 2000);
-    } catch {
-      showToast('Could not generate card');
-    } finally {
-      btnSaveCard.disabled = false;
-      if (btnSaveCard.textContent === '···') btnSaveCard.textContent = '🖼';
     }
   });
 
